@@ -1,0 +1,2386 @@
+# -*- coding: utf-8 -*-
+"""
+/***************************************************************************
+ QGISrunOpenDSS
+                                 A QGIS plugin
+ This plugin runs network studies using OpenDSS
+                              -------------------
+        begin                : 2015-12-03
+        git sha              : $Format:%H$
+        copyright            : (C) 2015 by EPERLab
+        email                : eperlab.eie@ucr.ac.cr
+ ***************************************************************************/
+
+/***************************************************************************
+ *                                                                         *
+ *   This program is free software; you can redistribute it and/or modify  *
+ *   it under the terms of the GNU General Public License as published by  *
+ *   the Free Software Foundation; either version 2 of the License, or     *
+ *   (at your option) any later version.                                   *
+ *                                                                         *
+ ***************************************************************************/
+"""
+""" Import the basic libraries used through the plugin"""
+import os
+from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication, QObject, SIGNAL, Qt
+from PyQt4.QtGui import QAction, QIcon, QFileDialog, QMessageBox, QDialog
+from PyQt4 import uic
+import resources  # Initialize Qt resources from file resources.py
+from QGIS_run_OpenDSS_dialog import QGISrunOpenDSSDialog  # Import the code for the dialog
+import numpy as np  # import random
+import auxiliary_functions as auxfcns  # File to define some usefull class/functions in python to do specific tasks
+import Harmonics  # File that contains harmonic simulation
+from matplotlib import pyplot as plt
+import matplotlib.patches as mpatches
+import xlrd
+import random
+from collections import OrderedDict
+import time
+import csv
+from qgis.core import QgsProject
+import glob
+import re
+from PyQt4.QtGui import *  # Para desplegar mensajes, útil para debugin
+from QGIS_run_OpenDSS_transformer import Ui_Transformer
+from QGIS_run_OpenDSS_progress import Ui_Progress
+import datetime as dt
+import matplotlib.dates as mdates
+
+
+# from QGIS_run_OpenDSS_harmonic import Ui_harmonics
+QApplication.setStyle(QStyleFactory.create('WindowsVista'))  # <- Choose the style
+
+# noinspection PyCallByClass
+class QGISrunOpenDSS:
+    def __init__(self, iface):
+        # Save reference to the QGIS interface
+        self.iface = iface
+        # initialize plugin directory
+        self.plugin_dir = os.path.dirname(__file__)
+        # initialize locale
+        locale = QSettings().value('locale/userLocale')[0:2]  # This line is used to select the OS language
+        if locale != (u'en'):
+            locale = (u'es')
+
+        locale_path = os.path.join(self.plugin_dir, 'i18n',
+                                   'QGISrunOpenDSS_{}.qm'.format(locale))  # This line links to the translation file
+
+        if os.path.exists(locale_path):
+            self.translator = QTranslator()
+            self.translator.load(locale_path)
+
+            if qVersion() > '4.3.3':
+                QCoreApplication.installTranslator(self.translator)
+
+        # Create the dialog (after translation) and keep reference
+        self.dlg = QGISrunOpenDSSDialog()
+        self.transformer = Ui_Transformer()
+        # self.harm = Ui_harmonics()
+        self.progress = Ui_Progress()
+        # iface.mainWindow().statusBar().addWidget(self.progress)
+
+        # Declare instance attributes
+        self.actions = []
+        self.menu = self.tr(QCoreApplication.translate('dialog', u'&Correr estudio de red usando OpenDSS'))
+
+        self.toolbar = self.iface.addToolBar(
+            QCoreApplication.translate('dialog', u'Correr estudio de red usando OpenDSS'))
+        self.toolbar.setObjectName(QCoreApplication.translate('dialog', u'Correr estudio de red usando OpenDSS'))
+
+        self.dlg.pushButton_output_folder.clicked.connect(self.select_output_folder)
+        self.dlg.pushButton_load_curve.clicked.connect(self.select_demand_curve)
+        self.dlg.pushButton_transformer.clicked.connect(self.transformer_button)
+        # self.dlg.pushButton_harmonics.clicked.connect(self.harmonic_button)
+        self.dlg.pushButton_res_spectrum.clicked.connect(self.select_res_spectrum)
+        self.dlg.pushButton_gen_spectrum.clicked.connect(self.select_gen_spectrum)
+        self.dlg.pushButton_TMT_spectrum.clicked.connect(self.select_TMT_spectrum)
+        self.dlg.pushButton_pv_info.clicked.connect(self.select_pv_info)
+        self.dlg.pushButton_pv_info_gen.clicked.connect(self.select_pv_info_gen)
+        self.dlg.pushButton_pv_info_TMT.clicked.connect(self.select_pv_info_TMT)
+
+        # SC checkboxex
+        self.dlg.checkBox_SC_phaseA.toggled.connect(self.short_circuit_enabler)
+        self.dlg.checkBox_SC_phaseB.toggled.connect(self.short_circuit_enabler)
+        self.dlg.checkBox_SC_phaseC.toggled.connect(self.short_circuit_enabler)
+        self.short_circuit_enabler()
+        self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+
+        # PV allocation
+        self.dlg.PV.toggled.connect(self.pv_allocation_enabler)
+        self.dlg.checkBox_PV_res.toggled.connect(self.pv_allocation_enabler)
+        self.dlg.checkBox_PV_gen.toggled.connect(self.pv_allocation_enabler)
+        self.dlg.checkBox_PV_TMT.toggled.connect(self.pv_allocation_enabler)
+
+        # harmonic enabler
+        self.dlg.harmonics.toggled.connect(self.harmonics_enabler)
+        self.dlg.checkBox_harm_res.toggled.connect(self.harmonics_enabler)
+        self.dlg.checkBox_harm_gen.toggled.connect(self.harmonics_enabler)
+        self.dlg.checkBox_harm_TMT.toggled.connect(self.harmonics_enabler)
+
+        self.dlg.powerflow_snapshot.toggled.connect(self.SLUenabler)
+        self.dlg.powerflow_daily.toggled.connect(self.SLUenabler)
+        self.dlg.powerflow_yearly.toggled.connect(self.SLUenabler)
+        self.dlg.short_circuit.toggled.connect(self.SLUenabler)
+
+        self.dlg.SCMVA.toggled.connect(self.scPowerAmps)
+        self.dlg.SCkA.toggled.connect(self.scPowerAmps)
+
+        self.SLUenabler()
+        self.dlg.comboBoxPVTipoEstudio.addItem(QCoreApplication.translate('dialog', 'Aleatorio'))
+        self.dlg.comboBoxPVTipoEstudio.addItem(QCoreApplication.translate('dialog', "Mayor consumo"))
+        self.dlg.comboBoxPVTipoEstudio.addItem(QCoreApplication.translate('dialog', "Por probabilidad"))
+
+        self.dlg.lineEdit_snapshot_date.clear()
+        self.dlg.lineEdit_snapshot_time.clear()
+        self.dlg.lineEdit_sc_date.clear()
+        self.dlg.lineEdit_sc_time.clear()
+        self.dlg.lineEdit_daily_date.clear()
+        self.dlg.lineEdit_yearly.clear()
+        self.dlg.lineEdit_load_curve.clear()
+        self.dlg.lineEdit_dirOutput.clear()
+
+        self.dlg.lineEdit_harmonics.clear()
+        self.dlg.lineEdit_harmonic_date.clear()
+        self.dlg.lineEdit_harmonic_time.clear()
+        self.dlg.lineEdit_res_spectrum.clear()
+
+        ComboBoxChildren = self.dlg.findChildren(QComboBox)
+        ComboBox_Sub = ComboBoxChildren[0]
+        ComboBox_Sub.activated.connect(lambda: self.cktNameDefaults())
+        self.substation = ''
+
+        # Combo_Fill_Short_circuit
+        self.dlg.lineEdit_short_circuit.clear()
+        try:
+            buses = auxfcns.busSC()
+            self.dlg.lineEdit_short_circuit.addItems(buses)
+        except:
+            self.dlg.lineEdit_short_circuit.clear()
+            buses = [QCoreApplication.translate('SC', "Todas las barras MT"),
+                     QCoreApplication.translate('SC', 'Todas las barras BT'),
+                     QCoreApplication.translate('SC', 'Todas las barras MT y BT')]
+            self.dlg.lineEdit_short_circuit.addItems(buses)
+            pass
+
+    # Enable/disable short circuit checkboxes
+    def short_circuit_enabler(self):
+        if self.dlg.checkBox_SC_phaseA.isChecked() and self.dlg.checkBox_SC_phaseB.isChecked() and not self.dlg.checkBox_SC_phaseC.isChecked():
+            self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+        if not self.dlg.checkBox_SC_phaseA.isChecked() and self.dlg.checkBox_SC_phaseB.isChecked() and self.dlg.checkBox_SC_phaseC.isChecked():
+            self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+        if self.dlg.checkBox_SC_phaseA.isChecked() and not self.dlg.checkBox_SC_phaseB.isChecked() and self.dlg.checkBox_SC_phaseC.isChecked():
+            self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+        if self.dlg.checkBox_SC_phaseA.isChecked() and self.dlg.checkBox_SC_phaseB.isChecked() and self.dlg.checkBox_SC_phaseC.isChecked():
+            self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+        if self.dlg.checkBox_SC_phaseA.isChecked() and not self.dlg.checkBox_SC_phaseB.isChecked() and not self.dlg.checkBox_SC_phaseC.isChecked():
+            self.dlg.checkBox_SC_phaseLL.setEnabled(False)
+        if not self.dlg.checkBox_SC_phaseA.isChecked() and self.dlg.checkBox_SC_phaseB.isChecked() and not self.dlg.checkBox_SC_phaseC.isChecked():
+            self.dlg.checkBox_SC_phaseLL.setEnabled(False)
+        if not self.dlg.checkBox_SC_phaseA.isChecked() and not self.dlg.checkBox_SC_phaseB.isChecked() and self.dlg.checkBox_SC_phaseC.isChecked():
+            self.dlg.checkBox_SC_phaseLL.setEnabled(False)
+
+    # Switch between kA and MVA for short circuit
+    def scPowerAmps(self):
+        if self.dlg.SCkA.isChecked():
+            self.dlg.Box_circuit_definition_5.setTitle(QCoreApplication.translate('dialog',
+                                                                                  u'Ingrese kA 3p de corto circuito'))
+            self.dlg.Box_circuit_definition_6.setTitle(QCoreApplication.translate('dialog',
+                                                                                  u'Ingrese kA 1p de corto circuito'))
+        if self.dlg.SCMVA.isChecked():
+            self.dlg.Box_circuit_definition_5.setTitle(QCoreApplication.translate('dialog',
+                                                                                  u'Ingrese MVA 3p de corto circuito'))
+            self.dlg.Box_circuit_definition_6.setTitle(QCoreApplication.translate('dialog',
+                                                                                  u'Ingrese MVA 1p de corto circuito'))
+
+    # Losses, unbalance and save to shapes checkboxes enabler
+    def SLUenabler(self):
+        if self.dlg.powerflow_snapshot.isChecked() or self.dlg.powerflow_daily.isChecked() or self.dlg.short_circuit.isChecked():
+            self.dlg.checkBoxLosses.setEnabled(True)
+            self.dlg.checkBoxUnbalance.setEnabled(True)
+            self.dlg.checkBox_capas.setEnabled(True)
+        else:
+            self.dlg.checkBoxLosses.setEnabled(False)
+            self.dlg.checkBoxUnbalance.setEnabled(False)
+            self.dlg.checkBox_capas.setEnabled(False)
+
+    # Add tech/ PV enabler
+    def pv_allocation_enabler(self):
+        if self.dlg.PV.isChecked():
+            self.dlg.lineEdit_pv_capacity.setEnabled(False)
+            self.dlg.lineEdit_pv_capacity_gen.setEnabled(False)
+            self.dlg.lineEdit_pv_capacity_TMT.setEnabled(False)
+            self.dlg.lineEdit_pv_info.setEnabled(False)
+            self.dlg.lineEdit_pv_info_gen.setEnabled(False)
+            self.dlg.lineEdit_pv_info_TMT.setEnabled(False)
+            self.dlg.pushButton_pv_info.setEnabled(False)
+            self.dlg.pushButton_pv_info_gen.setEnabled(False)
+            self.dlg.pushButton_pv_info_TMT.setEnabled(False)
+
+            if self.dlg.checkBox_PV_res.isChecked():
+                self.dlg.lineEdit_pv_capacity.setEnabled(True)
+                self.dlg.lineEdit_pv_info.setEnabled(True)
+                self.dlg.pushButton_pv_info.setEnabled(True)
+
+            if self.dlg.checkBox_PV_gen.isChecked():
+                self.dlg.lineEdit_pv_capacity_gen.setEnabled(True)
+                self.dlg.lineEdit_pv_info_gen.setEnabled(True)
+                self.dlg.pushButton_pv_info_gen.setEnabled(True)
+
+            if self.dlg.checkBox_PV_TMT.isChecked():
+                self.dlg.lineEdit_pv_capacity_TMT.setEnabled(True)
+                self.dlg.lineEdit_pv_info_TMT.setEnabled(True)
+                self.dlg.pushButton_pv_info_TMT.setEnabled(True)
+
+    def harmonics_enabler(self):
+        if self.dlg.harmonics.isChecked():
+            self.dlg.lineEdit_res_spectrum.setEnabled(False)
+            self.dlg.lineEdit_gen_spectrum.setEnabled(False)
+            self.dlg.lineEdit_TMT_spectrum.setEnabled(False)
+            self.dlg.pushButton_res_spectrum.setEnabled(False)
+            self.dlg.pushButton_gen_spectrum.setEnabled(False)
+            self.dlg.pushButton_TMT_spectrum.setEnabled(False)
+
+            if self.dlg.checkBox_harm_res.isChecked():
+                self.dlg.lineEdit_res_spectrum.setEnabled(True)
+                self.dlg.pushButton_res_spectrum.setEnabled(True)
+
+            if self.dlg.checkBox_harm_gen.isChecked():
+                self.dlg.lineEdit_gen_spectrum.setEnabled(True)
+                self.dlg.pushButton_gen_spectrum.setEnabled(True)
+
+            if self.dlg.checkBox_harm_TMT.isChecked():
+                self.dlg.lineEdit_TMT_spectrum.setEnabled(True)
+                self.dlg.pushButton_TMT_spectrum.setEnabled(True)
+
+    # fill the circuit comboBox
+    def circuit_calling(self):
+        self.dlg.lineEdit_circuit_name.clear()
+        prjpath = QgsProject.instance().fileName()
+        if not prjpath:
+            return
+        dir_general, dir_general2 = prjpath.split('/GIS', 1)
+        dir_networks = dir_general + '/DSS'  # Folder where all network models are stored
+        os.chdir(dir_networks)
+        networks = dir_general.split('/')[-1]  # [d for d in os.listdir('.') if os.path.isdir(d)]
+        self.dlg.lineEdit_circuit_name.setText(networks)
+        # self.dlg.comboBox_circuit_name.addItems(networks)
+
+    # Method to select the output folder
+    def select_output_folder(self):
+        output_folder = QFileDialog.getExistingDirectory(self.dlg, QCoreApplication.translate('dialog',
+                                                                                              "Seleccione carpeta de salida"),
+                                                         "", )
+        self.dlg.lineEdit_dirOutput.setText(output_folder)
+
+    # Method to select the load curve of the circuit
+    def select_demand_curve(self):
+        load_curve_circuit = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog',
+                                                                                              'Seleccione el archivo .CSV para asignar curva de demanda de circuito'),
+                                                         "", "*.csv")
+        self.dlg.lineEdit_load_curve.setText(load_curve_circuit)
+
+    def transformer_button(self):  # Method to call the main transformer configuration window
+        self.transformer.show()
+
+    def harmonic_button(self):  # Method to call the harmonic configuration window
+        self.harm.show()
+
+    def select_pv_info_gen(self):
+        load_pv_info = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog',
+                                                                                        u'Seleccione el archivo .CSV para asignar la información de los sistemas fotovoltaicos'),
+                                                   "", "*.csv")
+        self.dlg.lineEdit_pv_info_gen.setText(load_pv_info)
+
+    def select_pv_info_TMT(self):
+        load_pv_info = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog',
+                                                                                        u'Seleccione el archivo .CSV para asignar la información de los sistemas fotovoltaicos'),
+                                                   "", "*.csv")
+        self.dlg.lineEdit_pv_info_TMT.setText(load_pv_info)
+
+    def select_pv_info(self):
+        load_pv_info = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog',
+                                                                                        u'Seleccione el archivo .CSV para asignar la información de los sistemas fotovoltaicos'),
+                                                   "", "*.csv")
+        self.dlg.lineEdit_pv_info.setText(load_pv_info)
+
+    def select_res_spectrum(self):  # Method to select the residential harmonic spectrum
+        load_res_spectrum = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog',
+                                                                                             u'Seleccione el archivo .XLS para asignar el espectro de armónicos residencial'),
+                                                        "", "*.xls")
+        self.dlg.lineEdit_res_spectrum.setText(load_res_spectrum)
+
+    def select_gen_spectrum(self):  # Method to select the residential harmonic spectrum
+        load_spectrum = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog',
+                                                                                             u'Seleccione el archivo .XLS para asignar el espectro de armónicos comercial e industrial'),
+                                                        "", "*.xls")
+        self.dlg.lineEdit_gen_spectrum.setText(load_spectrum)
+
+    def select_TMT_spectrum(self):  # Method to select the residential harmonic spectrum
+        load_spectrum = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog',
+                                                                                             u'Seleccione el archivo .XLS para asignar el espectro de armónicos de media tensión'),
+                                                        "", "*.xls")
+        self.dlg.lineEdit_TMT_spectrum.setText(load_spectrum)
+
+    # change the parameters according to the selected circuit
+    def cktNameDefaults(self):
+        prjpath = QgsProject.instance().fileName()
+        if not prjpath:
+            return
+        dir_general, dir_general2 = prjpath.split('/GIS', 1)
+        dir_networks = dir_general + '/DSS'  # Folder where network model is stored
+        # mydir = dir_networks + '\\' + self.dlg.comboBox_circuit_name.currentText()
+        os.chdir(dir_networks)
+        for file in glob.glob("*.dss"):
+            file_check = re.sub('\.dss$', '', file)
+            file_check = file_check[-10:]
+            file_name = re.sub('\.dss$', '', file).replace('_' + file_check, '')
+            if file_check == 'Substation':
+                file_name_path = str(os.getcwd()) + '\\' + '\\' + file
+                fp = open(file_name_path)
+                lines = fp.readlines()
+                line = lines[1]
+                line = line.split(' ')
+                self.dlg.lineEdit_frequency.clear()
+                self.dlg.lineEdit_frequency.setText('60')
+
+                self.dlg.lineEdit_phase.clear()
+                self.dlg.lineEdit_phase.setText('0')
+
+                #self.dlg.lineEdit_3pShortCircuitPower.clear()
+                if self.dlg.lineEdit_3pShortCircuitPower.text() == '':
+                    self.dlg.lineEdit_3pShortCircuitPower.setText('10')
+
+                #self.dlg.lineEdit_1pShortCircuitPower.clear()
+                if self.dlg.lineEdit_1pShortCircuitPower.text() == '':
+                    self.dlg.lineEdit_1pShortCircuitPower.setText('10.5')
+
+                self.dlg.lineEdit_dirOutput.clear()
+                self.dlg.lineEdit_dirOutput.setText('C:\Results_QGISPython')
+                if "UNIT" in lines[0]: # substation is single unit
+                    self.transformer.checkBox_tertiary.setCheckState(0)
+                    for ij in range(len(line)):
+                        line_check = line[ij]
+                        # Windings fillup
+                        if line_check == 'windings=3':
+                            self.transformer.checkBox_tertiary.setCheckState(1)
+                            # Voltages fillup
+                        if line_check[:5] == 'kVs=[':
+                            def_V_prim = line_check.replace('kVs=[', '')
+                            self.dlg.lineEdit_voltage.clear()
+                            self.dlg.lineEdit_voltage.setText(def_V_prim)
+                            self.transformer.lineEdit_voltage_high.clear()
+                            self.transformer.lineEdit_voltage_high.setText(def_V_prim)
+                            V_ter = line[ij + 2]
+                            if V_ter[-1:] == ']':
+                                V_sec = line[ij + 1]
+                                self.transformer.lineEdit_voltage_low.clear()
+                                self.transformer.lineEdit_voltage_low.setText(V_sec)
+                                V_ter = V_ter.replace(']', '')
+                                self.transformer.lineEdit_voltage_tertiary.clear()
+                                self.transformer.lineEdit_voltage_tertiary.setText(V_ter)
+                            else:
+                                V_sec = line[ij + 1]
+                                V_sec = V_sec.replace(']', '')
+                                self.transformer.lineEdit_voltage_low.clear()
+                                self.transformer.lineEdit_voltage_low.setText(V_sec)
+                        # Powers fillup
+                        if line_check[:6] == 'kVAs=[':
+                            P_prim = line_check.replace('kVAs=[', '')
+                            self.transformer.lineEdit_power_high.clear()
+                            self.transformer.lineEdit_power_high.setText(P_prim)
+                            P_ter = line[ij + 2]
+                            if P_ter[-1:] == ']':
+                                P_sec = line[ij + 1]
+                                self.transformer.lineEdit_power_low.clear()
+                                self.transformer.lineEdit_power_low.setText(P_sec)
+                                P_ter = P_ter.replace(']', '')
+                                self.transformer.lineEdit_power_tertiary.clear()
+                                self.transformer.lineEdit_power_tertiary.setText(P_ter)
+                            else:
+                                P_sec = line[ij + 1]
+                                P_sec = P_sec.replace(']', '')
+                                self.transformer.lineEdit_power_low.clear()
+                                self.transformer.lineEdit_power_low.setText(P_sec)
+                        # Reactances fillup
+                        if line_check[:4] == 'xhl=':
+                            X_hl = line_check.replace('xhl=', '')
+                            self.transformer.lineEdit_x_hl.clear()
+                            self.transformer.lineEdit_x_hl.setText(X_hl)
+                        if line_check[:4] == 'xht=':
+                            X_ht = line_check.replace('xht=', '')
+                            self.transformer.lineEdit_x_ht.clear()
+                            self.transformer.lineEdit_x_ht.setText(X_ht)
+                        if line_check[:4] == 'xlt=':
+                            X_lt = line_check.replace('xlt=', '')
+                            self.transformer.lineEdit_x_lt.clear()
+                            self.transformer.lineEdit_x_lt.setText(X_lt)
+                            # Losses fillup
+                        if line_check[:12] == '%noloadloss=':
+                            noloadloss = line_check.replace('%noloadloss=', '')
+                            self.transformer.lineEdit_losses_no_load.clear()
+                            self.transformer.lineEdit_losses_no_load.setText(noloadloss)
+                        if line_check[:10] == '%loadloss=':
+                            inloadloss = line_check.replace('%loadloss=', '')
+                            self.transformer.lineEdit_losses_in_load.clear()
+                            self.transformer.lineEdit_losses_in_load.setText(inloadloss)
+                        # Main bus fillup
+                        if line_check[:7] == 'buses=[':
+                            bus = line[ij + 1]
+                            bus = bus.split('.')
+                            bus = bus[0]
+                            self.dlg.lineEdit_name_busbar.clear()
+                            self.dlg.lineEdit_name_busbar.setText(bus)
+                        # Taps fillup
+                        if line_check[:8] == 'numtaps=':
+                            taps = line_check.replace('numtaps=', '')
+                            self.transformer.lineEdit_no_taps.setText(taps)
+                        if line_check[:4] == 'tap=':
+                            tap = line_check.replace('tap=', '')
+                            self.transformer.lineEdit_tap_position.setText(tap)
+                        if line_check[:7] == 'maxtap=':
+                            maxtap = line_check.replace('maxtap=', '')
+                            self.transformer.lineEdit_max_tap.setText(maxtap)
+                        if line_check[:7] == 'mintap=':
+                            mintap = line_check.replace('mintap=', '')
+                            self.transformer.lineEdit_min_tap.setText(mintap)
+                        # Connections fillup
+                        if line_check[:7] == 'conns=[':
+                            conP = line_check.replace('conns=[', '')
+                            if conP == 'wye':
+                                self.transformer.comboBox_conn_high.setCurrentIndex(0)
+                            elif conP == 'delta':
+                                self.transformer.comboBox_conn_high.setCurrentIndex(1)
+
+                        if line_check[:7] == 'conns=[':
+                            conP = line_check.replace('conns=[', '')
+                            if conP == 'wye':
+                                self.transformer.comboBox_conn_high.setCurrentIndex(0)
+                            elif conP == 'delta':
+                                self.transformer.comboBox_conn_high.setCurrentIndex(1)
+                            conT = line[ij + 2]
+                            conS = line[ij + 1]
+                            if conT[-1:] == ']':
+                                if conT == 'wye]':
+                                    self.transformer.comboBox_conn_tertiary.setCurrentIndex(0)
+                                elif conT == 'delta]':
+                                    self.transformer.comboBox_conn_tertiary.setCurrentIndex(1)
+                                if conS == 'wye':
+                                    self.transformer.comboBox_conn_low.setCurrentIndex(0)
+                                else:
+                                    self.transformer.comboBox_conn_low.setCurrentIndex(1)
+                            else:
+                                if conS == 'wye]':
+                                    self.transformer.comboBox_conn_low.setCurrentIndex(0)
+                                elif conS == 'delta]':
+                                    self.transformer.comboBox_conn_low.setCurrentIndex(1)
+                        if line_check[:4] == 'wdg=':
+                            if line_check == 'wdg=1':
+                                self.transformer.comboBox_tap_location.setCurrentIndex(0)
+                            else:
+                                self.transformer.comboBox_tap_location.setCurrentIndex(1)
+                    self.dlg.transformer_modelling.setTitle(QCoreApplication.translate('dialog',
+                                                                                       u'Transformador principal'))
+                    self.dlg.transformer_modelling.setEnabled(True)
+                elif "NOMODEL" in lines[0]: # substation empty model
+                    self.dlg.transformer_modelling.setChecked(False)
+                    self.dlg.transformer_modelling.setEnabled(True)
+                    self.dlg.lineEdit_voltage.clear()
+                    self.dlg.lineEdit_voltage.setText(line[2])
+                    self.dlg.lineEdit_name_busbar.clear()
+                    self.dlg.lineEdit_name_busbar.setText(line[0])
+                    self.substation = 'None'
+                elif "AUTO" in lines[0]: #substation as autotransformer
+                    self.substation = 'Auto'
+                    self.dlg.transformer_modelling.setChecked(False)
+                    self.dlg.transformer_modelling.setEnabled(False)
+                    self.dlg.lineEdit_voltage.clear()
+                    line = lines[3]
+                    line_check = line.split(" ")
+                    for ij in range(len(line_check)):
+                        if 'kVs=[' in line_check[ij]:
+                            def_V_prim = float(line_check[ij].replace('kVs=[', ''))*np.sqrt(3) # from kVs line to neutral to kVs line to line
+                            self.dlg.lineEdit_voltage.clear()
+                            self.dlg.lineEdit_voltage.setText(str(def_V_prim))
+                    self.dlg.lineEdit_name_busbar.clear()
+                    self.dlg.lineEdit_name_busbar.setText('BUSMV' + file_name + '1') # first bus
+                    self.dlg.transformer_modelling.setTitle(QCoreApplication.translate('dialog',
+                                                                                       u'Autotransformador en subestación'))
+                fp.close()
+            else:
+                pass  # no substation
+
+    # method to extract first MV line name
+    def firstLine(self):
+        # line = self.dlg.lineEdit_name_busbar.text()
+        mainBus = self.dlg.lineEdit_name_busbar.text() + "."
+        prjpath = QgsProject.instance().fileName()
+        if not prjpath:
+            return
+        dir_general, dir_general2 = prjpath.split('/GIS', 1)
+        dir_networks = dir_general + '/DSS'  # Folder where all network models are stored
+        # mydir = dir_networks + '\\' + self.dlg.comboBox_circuit_name.currentText()
+        os.chdir(dir_networks)
+        line = ''
+        for file in glob.glob("*.dss"):
+
+            file_check = re.sub('\.dss$', '', file)
+            file_check = file_check[-7:]
+            if file_check == 'LinesMV':
+
+                file_name_path = str(os.getcwd()) + '\\' + '\\' + file
+                # print mainBus
+                fp = open(file_name_path)
+                lines = fp.readlines()
+                for i in lines:
+                    #print i
+                    if mainBus in i:
+                        line = i.split(" ")[1].replace('line.', '')
+                if line == '':
+                    QMessageBox.information(None, QCoreApplication.translate('dialog', u"Error al encontrar primera línea"),
+                                            QCoreApplication.translate('dialog',
+                                                                       u"Verficar conexión de subestación"))
+        #print line
+        return line
+
+    def tr(self, message):
+        # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
+        return QCoreApplication.translate('dialog', 'Correr estudio de red usando OpenDSS', message)
+
+    def add_action(self, icon_path, text, callback, enabled_flag=True, add_to_menu=True,
+                   add_to_toolbar=True, status_tip=None, whats_this=None, parent=None):
+        icon = QIcon(icon_path)
+        action = QAction(icon, text, parent)
+        action.triggered.connect(callback)
+        action.setEnabled(enabled_flag)
+        if status_tip is not None:
+            action.setStatusTip(status_tip)
+        if whats_this is not None:
+            action.setWhatsThis(whats_this)
+        if add_to_toolbar:
+            self.toolbar.addAction(action)
+        if add_to_menu:
+            self.iface.addPluginToMenu(self.menu, action)
+        self.actions.append(action)
+        return action
+
+    def initGui(self):
+        """Create the menu entries and toolbar icons inside the QGIS GUI."""
+        icon_path = ':/plugins/QGISrunOpenDSS/icon.png'
+        self.add_action(icon_path,
+                        text=self.tr(QCoreApplication.translate('dialog', u'Correr estudio de red usando OpenDSS')),
+                        callback=self.run, parent=self.iface.mainWindow())
+
+    def unload(self):
+        """Removes the plugin menu item and icon from QGIS GUI."""
+        for action in self.actions:
+            self.iface.removePluginMenu(
+                self.tr(QCoreApplication.translate('dialog', u'&Correr estudio de red usando OpenDSS')), action)
+            self.iface.removeToolBarIcon(action)
+        del self.toolbar  # remove the toolbar
+
+    def run(self):
+        # import/install comtypes library
+        try:
+            import comtypes.client as cc
+        except ImportError:
+            auxfcns.installCOM() # install comtypes library
+
+        def_time = '18:00' # default time
+
+        if self.dlg.lineEdit_circuit_name.text() == '':
+            try:
+                self.circuit_calling()  # call the networks
+            except ValueError:
+                QMessageBox.information(None, QCoreApplication.translate('dialog', "Error al abrir el archivo"),
+                                        QCoreApplication.translate('dialog',
+                                                                   "El projecto en QGIS debe poseer el formato establecido en el manual") + "\n" + \
+                                        QCoreApplication.translate('dialog', "y ya deben existir los archivos *.dss"))
+                return
+        self.cktNameDefaults()
+        str_time = time.strftime("%Y%m%d%H%M%S",
+                                 time.gmtime())  # This string is used to create an unique time string to be adopted when saving results
+        prjpath = QgsProject.instance().fileName()
+        if not prjpath:
+            QMessageBox.information(None, QCoreApplication.translate('dialog', "Error al abrir el archivo"),
+                                    QCoreApplication.translate('dialog',
+                                                               u"El projecto en QGIS debe estar abierto") + "\n" + \
+                                    QCoreApplication.translate('dialog', u"para poder analizar la red de distribución"))
+
+            return
+        dir_general, dir_general2 = prjpath.split('/GIS', 1)
+        dir_networks = dir_general + '/DSS'  # Folder where all network models are stored
+        os.chdir(dir_networks)
+        networks = [d for d in os.listdir('.') if os.path.isdir(d)]
+
+        if self.dlg.transformer_modelling.isChecked():
+            self.cktNameDefaults()
+        firstLine = self.firstLine()  # first line name
+        if firstLine == '':
+            return
+        dir_network = dir_networks
+        files_names = list(glob.glob(os.path.join(dir_networks, '*.dss')))
+        for file in files_names:
+            if len(file.split('\\')[1].split('.')[0].split('_')) > 1:
+                if file.split('\\')[1].split('.')[0].split('_')[1] == 'OutputQGIS2OpenDSS':
+                    name_file_created = file.split('\\')[1].split('.')[0]
+
+        # Combo_Fill_Short_circuit
+        try:
+            try:
+                ib = self.dlg.lineEdit_short_circuit.itemText(3)
+            except IndexError:
+                ib = ''
+            if not name_file_created in ib:
+                buses = auxfcns.busSC()
+                self.dlg.lineEdit_short_circuit.clear()
+                self.dlg.lineEdit_short_circuit.addItems(buses)
+        except:
+            self.dlg.lineEdit_short_circuit.clear()
+            buses = [QCoreApplication.translate('SC', "Todas las barras MT"),
+                     QCoreApplication.translate('SC', 'Todas las barras BT'),
+                     QCoreApplication.translate('SC', 'Todas las barras MT y BT')]
+            self.dlg.lineEdit_short_circuit.addItems(buses)
+            pass
+
+        ########NUEVOS PARAMETROS DE ARMONICOS
+        type_parameters = ['GMM', 'GMM']
+        # self.dlg.comboBox_parameters.addItems(type_parameters)
+
+        type_tx_conns = [QCoreApplication.translate('dialog', 'Estrella'),
+                         QCoreApplication.translate('dialog', 'Delta')]
+        self.transformer.comboBox_conn_high.clear()
+        self.transformer.comboBox_conn_high.addItems(type_tx_conns)
+        self.transformer.comboBox_conn_tertiary.clear()
+        self.transformer.comboBox_conn_tertiary.addItems(type_tx_conns)
+        self.transformer.comboBox_conn_low.clear()
+        self.transformer.comboBox_conn_low.addItems(type_tx_conns)
+        type_tx_conns = ['wye', 'delta']
+        tap_location = [QCoreApplication.translate('dialog', 'Alta'), QCoreApplication.translate('dialog', 'Baja')]
+        self.transformer.comboBox_tap_location.clear()
+        self.transformer.comboBox_tap_location.addItems(tap_location)
+
+        # show the dialog
+        self.dlg.show()
+        # Run the dialog event loop
+        result = self.dlg.exec_()
+        # See if OK was pressed
+        if result:
+            ################ All variables defined in the GUI are read here ################
+            # Basic circuit data
+            firstLine = self.firstLine()  # first line name
+            tinitial = time.time()
+            network = self.dlg.lineEdit_circuit_name.text()  # self.dlg.comboBox_circuit_name.currentIndex()
+            # network = selected_network
+            dir_network = dir_networks
+            files_names = list(glob.glob(os.path.join(dir_networks, '*.dss')))
+            for file in files_names:
+                if len(file.split('\\')[1].split('.')[0].split('_')) > 1:
+                    if file.split('\\')[1].split('.')[0].split('_')[1] == 'OutputQGIS2OpenDSS':
+                        name_file_created = file.split('\\')[1].split('.')[0]
+
+            frequency = self.dlg.lineEdit_frequency.text()
+            if not frequency:
+                frequency = 60  # def_f_nom
+
+            volt_nom = self.dlg.lineEdit_voltage.text()
+            if not volt_nom:
+                volt_nom = 230  # def_V_prim
+
+            phase_angle = self.dlg.lineEdit_phase.text()
+            if not phase_angle:
+                phase_angle = 0  # def_angle_nom
+
+            three_phase_SC = self.dlg.lineEdit_3pShortCircuitPower.text()
+            if not three_phase_SC:
+                three_phase_SC = 10  # def_3pSCP_nom
+
+            single_phase_SC = self.dlg.lineEdit_1pShortCircuitPower.text()
+            if not single_phase_SC:
+                single_phase_SC = 10.5  # def_1pSCP_nom
+
+            number_simulations = 1
+
+            load_curve_circuit = self.dlg.lineEdit_load_curve.text()  # Name of the load curve of the circuit
+
+            if load_curve_circuit:
+                with open(load_curve_circuit, 'rt') as workbook:
+                    reader = csv.reader(workbook)
+                    next(reader)
+                    try:
+                        circuit_demand = [[row[3], row[2], row[0], row[1]] for row in
+                                          reader]  # hour, day, P (kW), Q (kVAr)
+                    except:
+                        QMessageBox.information(None, QCoreApplication.translate('dialog', u"Informacion errónea"),
+                                                QCoreApplication.translate('dialog',
+                                                                           u"Curva de demanda del alimentador errónea"))
+                        workbook.closed
+                        return
+                workbook.closed
+
+            tx_main_bus_circuit = self.dlg.lineEdit_name_busbar.text().upper()  # Name of the main busbar
+
+            if not load_curve_circuit and not tx_main_bus_circuit:
+                QMessageBox.information(None, QCoreApplication.translate('dialog', "Informacion Requerida"),
+                                        QCoreApplication.translate('dialog',
+                                                                   "Seleccione la curva de demanda del alimentador y" + '\n' + \
+                                                                   QCoreApplication.translate('dialog',
+                                                                                              "defina el nombre de la barra principal")))
+                return
+
+            if not load_curve_circuit:
+                QMessageBox.information(None, QCoreApplication.translate('dialog', "Informacion Requerida"),
+                                        QCoreApplication.translate('dialog',
+                                                                   "Seleccione la curva de demanda del alimentador") + '\n')
+                return
+
+            if not tx_main_bus_circuit:
+                QMessageBox.information(None, QCoreApplication.translate('dialog', "Informacion Requerida"),
+                                        QCoreApplication.translate('dialog',
+                                                                   "Defina el nombre de la barra principal") + '\n')
+                return
+
+            # Transformer data
+            line_tx_definition = ''
+            if self.dlg.transformer_modelling.isChecked():
+                tx_active = True
+                if self.transformer.checkBox_tertiary.isChecked():
+                    tx_tertiary_bus_circuit = 'tertiary_no_use'
+                    tx_voltage_high = self.transformer.lineEdit_voltage_high.text().upper()
+                    tx_voltage_low = self.transformer.lineEdit_voltage_low.text().upper()
+                    tx_voltage_tertiary = self.transformer.lineEdit_voltage_tertiary.text().upper()
+                    selected_conn = self.transformer.comboBox_conn_high.currentIndex()
+                    tx_conn_high = type_tx_conns[selected_conn]
+                    selected_conn = self.transformer.comboBox_conn_low.currentIndex()
+                    tx_conn_low = type_tx_conns[selected_conn]
+                    selected_conn = self.transformer.comboBox_conn_tertiary.currentIndex()
+                    tx_conn_tertiary = type_tx_conns[selected_conn]
+                    tx_power_high = self.transformer.lineEdit_power_high.text().upper()
+                    tx_power_low = self.transformer.lineEdit_power_low.text().upper()
+                    tx_power_tertiary = self.transformer.lineEdit_power_tertiary.text().upper()
+                    tx_reactance_hl = self.transformer.lineEdit_x_hl.text().upper()
+                    tx_reactance_ht = self.transformer.lineEdit_x_ht.text().upper()
+                    tx_reactance_lt = self.transformer.lineEdit_x_lt.text().upper()
+                    tx_lossess_noload = self.transformer.lineEdit_losses_no_load.text().upper()
+                    tx_lossess_inload = self.transformer.lineEdit_losses_in_load.text().upper()
+                    ltc_location = self.transformer.comboBox_tap_location.currentIndex()
+                    tx_ltc_location = tap_location[ltc_location]
+                    if tx_ltc_location == 'Alta':
+                        tx_ltc_location_definition = '1'
+                    else:
+                        tx_ltc_location_definition = '2'
+                    tx_number_taps = self.transformer.lineEdit_no_taps.text().upper()
+                    tx_current_tap_position = self.transformer.lineEdit_tap_position.text().upper()
+                    tx_max_tap_position = self.transformer.lineEdit_max_tap.text().upper()
+                    tx_min_tap_position = self.transformer.lineEdit_min_tap.text().upper()
+                    # ------------------------------------
+                    setNew = 'Edit'
+                    if self.substation == 'None':
+                        setNew = 'New'
+                    line_tx_definition = setNew + ' transformer.HVMV phases=3 windings=3 buses=[sourcebus,' + tx_main_bus_circuit + ',' + tx_tertiary_bus_circuit + '] conns=[' \
+                                         + tx_conn_high + ',' + tx_conn_low + ',' + tx_conn_tertiary + '] kvs=[' + tx_voltage_high + ',' + tx_voltage_low + ',' + tx_voltage_tertiary \
+                                         + '] kvas=[' + tx_power_high + ',' + tx_power_low + ',' + tx_power_tertiary + '] xhl=' + tx_reactance_hl + ' xht=' + tx_reactance_ht + ' xlt=' + tx_reactance_lt \
+                                         + ' %loadloss=' + tx_lossess_inload + ' %noloadloss=' + tx_lossess_noload + ' wdg=' + tx_ltc_location_definition + ' numtaps=' + tx_number_taps \
+                                         + ' tap=' + tx_current_tap_position + ' maxtap=' + tx_max_tap_position + ' mintap=' + tx_min_tap_position
+                    # ------------------------------------    
+                else:
+                    tx_voltage_high = self.transformer.lineEdit_voltage_high.text().upper()
+                    tx_voltage_low = self.transformer.lineEdit_voltage_low.text().upper()
+                    selected_conn = self.transformer.comboBox_conn_high.currentIndex()
+                    tx_conn_high = type_tx_conns[selected_conn]
+                    selected_conn = self.transformer.comboBox_conn_low.currentIndex()
+                    tx_conn_low = type_tx_conns[selected_conn]
+                    tx_power_high = self.transformer.lineEdit_power_high.text().upper()
+                    tx_power_low = self.transformer.lineEdit_power_low.text().upper()
+                    tx_reactance_hl = self.transformer.lineEdit_x_hl.text().upper()
+                    tx_lossess_noload = self.transformer.lineEdit_losses_no_load.text().upper()
+                    tx_lossess_inload = self.transformer.lineEdit_losses_in_load.text().upper()
+                    selected_loc = self.transformer.comboBox_tap_location.currentIndex()
+                    tx_tap_location = tap_location[selected_loc]
+                    if tx_tap_location == 'Alta':
+                        tx_ltc_location_definition = '1'
+                    else:
+                        tx_ltc_location_definition = '2'
+                    tx_number_taps = self.transformer.lineEdit_no_taps.text().upper()
+                    tx_current_tap_position = self.transformer.lineEdit_tap_position.text().upper()
+                    tx_max_tap_position = self.transformer.lineEdit_max_tap.text().upper()
+                    tx_min_tap_position = self.transformer.lineEdit_min_tap.text().upper()
+                    # ------------------------------------
+                    setNew = 'Edit'
+                    if self.substation == 'None': # if no substation was modelled on QGIS2OpenDSS but is desired to add one
+                        setNew = 'New'
+                    line_tx_definition = setNew + ' transformer.HVMV phases=3 windings=2 buses=[sourcebus,' + tx_main_bus_circuit + '] conns=[' \
+                                         + tx_conn_high + ',' + tx_conn_low + '] kvs=[' + tx_voltage_high + ',' + tx_voltage_low + '] kvas=[' + tx_power_high \
+                                         + ',' + tx_power_low + '] xhl=' + tx_reactance_hl + ' %loadloss=' + tx_lossess_inload + ' %noloadloss=' + tx_lossess_noload \
+                                         + ' wdg=' + tx_ltc_location_definition + ' numtaps=' + tx_number_taps + ' tap=' + tx_current_tap_position + ' maxtap=' + tx_max_tap_position \
+                                         + ' mintap=' + tx_min_tap_position
+                    # ------------------------------------    
+
+            elif self.substation == 'Auto': # If transformer substation is an autotransformer
+                # QMessageBox.information(None, "Debug", self.substation)
+                line_tx_definition = ""
+                tx_active = True
+                tx_conn_low = 'wye'
+                pass
+            else: # self.substation == 'None':  # If transformer is not modelled, then the sourcebus is connected straight to a MV line
+                tx_active = False
+                line_tx_definition = ''
+                new_lines_file = open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_mod.dss', 'w')
+                with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV.dss', 'r') as temp:
+                    for aux in temp:
+                        linetemp = re.sub(r"\b%s\b" % tx_main_bus_circuit + '.1.2.3', 'Sourcebus', aux)
+                        new_lines_file.write(linetemp)
+                new_lines_file.close()
+
+            # add PV systems
+            if self.dlg.PV.isChecked():
+                PVS = list()
+                # study type
+                pv_study_type = self.dlg.comboBoxPVTipoEstudio.currentText()
+                if QCoreApplication.translate('dialog', "Mayor consumo") in pv_study_type:
+                    pv_study_type = "Maximum"
+                if QCoreApplication.translate('dialog', "Por probabilidad") in pv_study_type:
+                    pv_study_type = "Bernoulli"
+                if QCoreApplication.translate('dialog', "Aleatorio") in pv_study_type:
+                    pv_study_type = "Random"
+
+                # Residential
+                if self.dlg.checkBox_PV_res.isChecked():
+                    total_capacity = self.dlg.lineEdit_pv_capacity.text()
+                    pv_information = self.dlg.lineEdit_pv_info.text()
+
+                    if not total_capacity:
+                        total_capacity = str(200) # default to 200 kW
+                    if not pv_information:
+                        QMessageBox.information(None, QCoreApplication.translate('dialog', "Informacion Requerida"),
+                                                QCoreApplication.translate('dialog',
+                                                                           u"Seleccione el archivo de información de paneles para clientes residenciales") + '\n')
+                        return
+
+                # General
+                if self.dlg.checkBox_PV_gen.isChecked():
+                    total_capacity_gen = self.dlg.lineEdit_pv_capacity_gen.text()
+                    pv_information_gen = self.dlg.lineEdit_pv_info_gen.text()
+
+                    if not total_capacity_gen:
+                        total_capacity_gen = str(200)
+                    if not pv_information_gen:
+                        QMessageBox.information(None, QCoreApplication.translate('dialog', "Informacion Requerida"),
+                                                QCoreApplication.translate('dialog',
+                                                                           u"Seleccione el archivo de información de paneles para clientes comercial e industrial") + '\n')
+                        return
+
+                # TMT
+                if self.dlg.checkBox_PV_TMT.isChecked():
+                    total_capacity_TMT = self.dlg.lineEdit_pv_capacity_TMT.text()
+                    pv_information_TMT = self.dlg.lineEdit_pv_info_TMT.text()
+
+                    if not total_capacity_TMT:
+                        total_capacity_TMT = str(200)
+                    if not pv_information_TMT:
+                        QMessageBox.information(None, QCoreApplication.translate('dialog', "Informacion Requerida"),
+                                                QCoreApplication.translate('dialog',
+                                                                           u"Seleccione el archivo de información de paneles para clientes TMT") + '\n')
+                        return
+
+            output_folder = self.dlg.lineEdit_dirOutput.text()  # Output folder
+            if not output_folder:  # Default path is otherwise used
+                output_folder = "C:/QGISrunOpenDSS_Results"  # def_out_folder
+                if not os.path.exists(output_folder):
+                    os.mkdir(output_folder)
+
+            # loadshape files path
+            dir_profiles = os.path.join(dir_networks,
+                                        'profiles')
+            # update loadshapes files path on *.dss
+            load_profiles = auxfcns.ReadLoadProfiles(self, dir_profiles,
+                                                     dir_network,
+                                                     name_file_created)
+            # exit if an error occurred
+            if load_profiles[0] == "ERROR":
+                return
+            [DSSobj, DSSstart, DSStext, DSScircuit,
+             DSSprogress] = auxfcns.SetUpCOMInterface()  # Inicializacion de la interfaz COM de OpenDSS
+
+            # Master.dss file creation
+            created_files = open(dir_network + '/' + name_file_created + '.dss', 'r')
+            created_files = created_files.read()
+            if tx_active == False:
+                created_files = created_files.replace(name_file_created.split('_')[0] + '_LinesMV',
+                                                      name_file_created.split('_')[0] + '_LinesMV_mod')
+                created_files = created_files.replace('redirect ' + name_file_created.split('_')[0] + '_Substation.dss', '')
+            file = open(dir_network + '/Master.dss', 'w')
+            file.write('set defaultbasefrequency=' + frequency + '\n')
+            if self.dlg.SCMVA.isChecked():  # SC MVAs
+                file.write('Edit Vsource.Source BasekV=' + volt_nom + ' pu=1.00 angle=' + phase_angle +
+                           ' frequency=' + frequency + ' phases=3 MVAsc3='
+                           + three_phase_SC + ' MVAsc1=' + single_phase_SC + '\n')
+            if self.dlg.SCkA.isChecked():  # SC kAs
+                file.write('Edit Vsource.Source BasekV=' + volt_nom + ' pu=1.00 angle=' + phase_angle +
+                           ' frequency=' + frequency + ' phases=3 Isc3='
+                           + str(float(three_phase_SC) * 1000) + ' Isc1=' + str(float(single_phase_SC) * 1000) + '\n')
+            tx_modelling = False
+            if self.dlg.transformer_modelling.isChecked():  # see if transformer_modelling checkbox is active
+                tx_modelling = True
+
+            file.write(created_files + '\n')
+            file.close()
+
+            time_common_for_all = time.time() - tinitial
+
+            ######################################################################
+            ###########################    SNAPSHOT     ##########################
+            ######################################################################
+            # Routine to perform snapshot power flows
+            if self.dlg.powerflow_snapshot.isChecked():
+
+                DSSprogress.Show()
+                DSSprogress.Caption = QCoreApplication.translate('progress', u'Snapshot')
+                DSSprogress.PctProgress = 0
+
+                tinitial_snapshot = time.time() # time counter
+                snapshotdate = self.dlg.lineEdit_snapshot_date.text().upper()
+                if not snapshotdate:
+                    snapshotdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
+
+                snapshottime = self.dlg.lineEdit_snapshot_time.text() # read sim hour
+
+                if not snapshottime:
+                    snapshottime = def_time  # Default is 6pm
+
+                h, m = snapshottime.split(':')
+                if m is not '00' or '15' or '30' or '45':  # round sim minutes
+                    if int(m) <= 7:
+                        m = '00'
+                    elif int(m) <= 22:
+                        m = '15'
+                    elif int(m) <= 37:
+                        m = '30'
+                    elif int(m) <= 52:
+                        m = '45'
+                    else:
+                        m = '00'
+                        h = str(int(h) + 1)
+                        if int(h) == 24:  # last round on 23:45
+                            h = '23'
+                            m = '45'
+                if len(list(h)) < 2:
+                    h = '0' + h
+                snapshottime = h + ':' + m
+
+                daily_strtime = str(snapshotdate.replace('/', '') + snapshottime.replace(':', ''))
+                hora_sec = snapshottime.split(':')
+                for ij in range(len(circuit_demand)):
+                    temp_a = circuit_demand[ij][0]  # day
+                    temp_b = circuit_demand[ij][1]  # hour
+                    if str(temp_a.replace('/', '') + temp_b.replace(':', '')) == daily_strtime:
+                        P_to_be_matched = circuit_demand[ij][2]  # Active power
+                        Q_to_be_matched = circuit_demand[ij][3]  # Reactive power
+
+                DSSprogress.PctProgress = 17
+                DSStext.Command = 'clear'
+                DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'
+                DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
+                DSStext.Command = 'Set mode=daily'  # Type of Simulation
+                DSStext.Command = 'Set number=1'  # Number of steps to be simulated
+                DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s)
+                DSStext.Command = 'Set time=(' + hora_sec[0] + ',' + hora_sec[1] + ')'  # Set the start simulation time
+                DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the transformer secondary side to monitor P and Q
+
+                if tx_modelling and self.substation != 'Auto': # check tx_modelling and autotransformer
+                    DSStext.Command = line_tx_definition
+                for MC_iteration in range(
+                        int(number_simulations)):  # Run Monte Carlo Simulations, defaults to 1
+                    for t in range(1):  # Run the daily power flow for a particular moment
+                        gen_p = 0
+                        gen_q = 0
+                        DSScircuit.Solution.Solve()  # Initialization solution
+                        errorP = 0.003  # Maximum desired correction error for active power
+                        errorQ = 0.01  # Maximum desired correction error for reactive power
+                        max_it_correction = 10  # Maximum number of allowed iterations
+                        study = 'snapshot'  # Study type for PQ_corrector
+                        # distributed generators powers
+                        gen_powers = np.zeros(1)
+                        gen_rpowers = np.zeros(1)
+                        GenNames = DSScircuit.Generators.AllNames
+                        PVNames = DSScircuit.PVSystems.AllNames
+                        if GenNames[0] != 'NONE':
+                            for i in GenNames: # extract power from generators
+                                DSScircuit.setActiveElement('generator.' + i)
+                                p = DSScircuit.ActiveElement.Powers
+                                for w in range(0, len(p), 2):
+                                    gen_p += -p[w] # P
+                                    gen_q += -p[w + 1] # Q
+                            gen_powers[t] += gen_p
+                            gen_rpowers[t] += gen_q
+                        if PVNames[0] != 'NONE':
+                            for i in PVNames: # extract power from PVSystems
+                                DSScircuit.setActiveElement('PVSystem.' + i)
+                                p = DSScircuit.ActiveElement.Powers
+                                for w in range(0, len(p), 2):
+                                    gen_p += -p[w] # P
+                                    gen_q += -p[w + 1] # Q
+                            gen_powers[t] += gen_p
+                            gen_rpowers[t] += gen_q
+
+                        # load allocation algorithm
+                        [DSScircuit, errorP_i, errorQ_i, temp_powersP, temp_powersQ, kW_sim,
+                         kVAr_sim] = auxfcns.PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ,
+                                                          max_it_correction,
+                                                          P_to_be_matched, Q_to_be_matched, hora_sec, study,
+                                                          dir_network, tx_modelling, 1, firstLine, self.substation,
+                                                          line_tx_definition, gen_powers, gen_rpowers)
+                    DSSprogress.PctProgress = 50
+                    #### Post load allocation simmulation
+                    DSStext.Command = 'clear'
+                    DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'
+                    DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
+                    DSStext.Command = 'Set mode=daily'  # Type of Simulation
+                    DSStext.Command = 'Set number=1'  # Number of steps to be simulated
+                    DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s)
+                    DSStext.Command = 'Set time=(' + hora_sec[0] + ',' + hora_sec[
+                        1] + ')'  # Set the start simulation time
+                    if tx_modelling and self.substation != 'Auto':
+                        DSStext.Command = line_tx_definition
+                    if self.dlg.PV.isChecked():
+                        if self.dlg.checkBox_PV_res.isChecked():
+                            PVS += auxfcns.PV_allocation(total_capacity, pv_information, name_file_created, "R",
+                                                         pv_study_type)
+
+                        if self.dlg.checkBox_PV_gen.isChecked():
+                            PVS += auxfcns.PV_allocation(total_capacity_gen, pv_information_gen, name_file_created, "C",
+                                                         pv_study_type)
+
+                        if self.dlg.checkBox_PV_TMT.isChecked():
+                            PVS += auxfcns.PV_allocation(total_capacity_TMT, pv_information_TMT, name_file_created,
+                                                         "TMT",
+                                                         pv_study_type)
+
+                        for pv in range(len(PVS)):
+                            if PVS[pv] == "Error":
+                                return
+                            DSStext.Command = PVS[pv]
+                            # print(PVS[pv])
+                            # DSStext.Command = 'solve'
+
+                    DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the transformer secondary side to monitor P and Q
+                    DSStext.Command = 'calcvoltagebases'
+
+                    nodeVoltages_ph1 = []
+                    nodeVoltages_ph2 = []
+                    nodeVoltages_ph3 = []
+                    currentList = []
+
+                    DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[0]) # kW corrector
+                    DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[0]) # kVAr corrector
+                    DSScircuit.Solution.Solve()
+
+                    DSSprogress.PctProgress = 51
+
+                    # save results on shapes
+                    if self.dlg.checkBox_capas.isChecked():
+                        if t == 0:
+                            # kV base for all buses, must go after solution
+                            DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
+                            DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
+                            # Extract V from all nodes
+                            nodeNames_ph1 = DSScircuit.AllNodeNamesByPhase(1)
+                            nodeNames_ph2 = DSScircuit.AllNodeNamesByPhase(2)
+                            nodeNames_ph3 = DSScircuit.AllNodeNamesByPhase(3)
+                            # all line names
+                            lineNames = DSScircuit.Lines.allnames
+                            normalAmpsDic = auxfcns.normalAmps(DSScircuit, lineNames)  # ampacities dictionary
+                            auxfcns.newShape(self, lineNames, 'lineCurrents')  # create new shape
+                        nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)])  # Buses pu voltages ph1
+                        nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)])  # Buses pu voltages ph2
+                        nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)])  # Buses pu voltages ph3
+                        currentList.append(
+                            auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic,
+                                                 study))  # Normalized currents
+                        # voltages shapes update
+                        auxfcns.busVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nodeNames_ph1,
+                                         nodeNames_ph2, nodeNames_ph3, name_file_created, study)
+
+                        DSSprogress.PctProgress = 68
+                        # currents shape update
+                        auxfcns.lineCurrentsResults(self, lineNames, currentList, study)
+                        # transformer overload shape update
+                        auxfcns.trafosLoad(self, DSScircuit, DSStext, study, name_file_created)
+                    DSSprogress.PctProgress = 75
+
+                    final_output_folder = output_folder + '/Snapshot/'# + 'MC_' + str(MC_iteration + 1) + '/'
+                    if not os.path.exists(final_output_folder):
+                        os.makedirs(final_output_folder)
+
+                    # openDSS results path
+                    DSStext.Command = 'set datapath=' + final_output_folder
+
+                    DSStext.Command = 'monitor.HVMV_PQ_vs_Time.action=take'
+                    DSStext.Command = 'export monitors HVMV_PQ_vs_Time'
+
+                    # circuit losses
+                    if self.dlg.checkBoxLosses.isChecked():
+                        DSStext.Command = 'export losses'
+
+                    # voltage unbalance
+                    if self.dlg.checkBoxUnbalance.isChecked():
+                        buses = DSScircuit.ALLBusNames
+                        unbalance = {}
+                        orderedUnbalance = OrderedDict()
+                        orderedUnbalance = auxfcns.unbalance(self, DSScircuit, buses, unbalance, orderedUnbalance)
+
+                        x, y = zip(*orderedUnbalance.items())
+                        x_labels = []  # create an empty list to store the labels
+                        ticksIndex = np.arange(0, len(x), len(x) / 7, int)
+                        for key in ticksIndex:
+                            x_labels.append(x[key])
+
+                        fig, ax = plt.subplots()
+                        plt.plot(y, label=QCoreApplication.translate('graphs', u'Desbalance'))
+                        plt.title(QCoreApplication.translate('graphs', u'Desbalance de tensión'))
+                        DSScircuit.Monitors.ResetAll()
+                        # plt.xlim([0, 96])
+                        ax.set_xticks(ticksIndex)
+                        ax.set_xticklabels(x_labels, rotation=90)
+                        plt.xlabel(QCoreApplication.translate('graphs', u'Barras'))
+                        plt.ylabel(
+                            QCoreApplication.translate('graphs', u'Desbalance (%)'))
+                        plt.legend(fontsize=8, loc=2)
+                        plt.tight_layout()
+                        fig.show()
+                        fig.savefig(final_output_folder + '/' + network + '_Unbalance_' + str_time + '.pdf',
+                                    format='pdf',
+                                    dpi=6000)
+                        csvFile = final_output_folder + '/' + network + '_Unbalance_' + str_time + '.csv'
+                        with open(csvFile, 'w') as f:
+                            w = csv.writer(f, lineterminator='\n')
+                            w.writerow(["Bus", "Unbalance (%)"])
+                            for row in range(len(x)):
+                                # line = str(x[row]) + "," + str(y[row])
+                                w.writerow([str(x[row]), str(y[row])])
+
+                    # print DSScircuit.Losses
+                    DSSprogress.PctProgress = 100
+                    DSSprogress.Close()
+                    if not self.dlg.checkBox_capas.isChecked():
+                        DSStext.Command = 'visualize What={voltages} element=line.' + firstLine
+                        DSStext.Command = 'visualize What={currents} element=line.' + firstLine
+
+                    DSScircuit.Monitors.ResetAll()
+
+                tfinal_snapshot = time.time() - tinitial_snapshot # snapshot total time
+                if not self.dlg.powerflow_daily.isChecked() and not self.dlg.short_circuit.isChecked() \
+                        and not self.dlg.harmonics.isChecked() and not self.dlg.powerflow_yearly.isChecked():
+                    QMessageBox.information(None,
+                                            QCoreApplication.translate('dialog', "Simulacion Instantanea Terminada"),
+                                            QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
+                                                tfinal_snapshot + time_common_for_all) + " s" + "\n" + \
+                                            QCoreApplication.translate('dialog',
+                                                                       "Los archivos han sido guardados en:") + output_folder)
+                os.system('clear')
+
+            ###################################################################################
+            #################################      DAILY      #################################
+            ###################################################################################
+            # Routine to perform daily power flows
+            if self.dlg.powerflow_daily.isChecked():
+                DSSprogress.Show()
+                DSSprogress.Caption = QCoreApplication.translate('progress', u'Daily')
+                DSSprogress.PctProgress = 0
+
+                tinitial_daily = time.time()  # daily time start
+                dailydate = self.dlg.lineEdit_daily_date.text().upper()  # simulation date
+                if not dailydate:  # representative day selection routine
+                    dailydate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
+
+                SabcMC = []
+                DP_to_be_matched = []  # Real P
+                DQ_to_be_matched = []  # Real Q
+                for ij in range(len(circuit_demand)):
+                    temp_a = circuit_demand[ij][0]
+                    if str(temp_a.replace('/', '')) == str(dailydate.replace('/', '')):
+                        DP_to_be_matched.append(circuit_demand[ij][2])
+                        DQ_to_be_matched.append(circuit_demand[ij][3])
+
+                DSStext.Command = 'clear'  # clean previous circuits
+                DSStext.Command = 'New Circuit.Circuito_Distribucion_Daily'  # create a new circuit
+                DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # master file compilation
+                DSStext.Command = 'Set mode = daily'  # daily simulation mode
+                DSStext.Command = 'Set number= 1'  # steps by solve
+                DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s
+                DSStext.Command = 'Set time=(0,0)'  # Set the start simulation time
+                DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the first line to monitor P and Q
+                if tx_modelling and self.substation != 'Auto':
+                    DSStext.Command = line_tx_definition
+
+                # generators powers
+                gen_powers = np.zeros(96)
+                gen_rpowers = np.zeros(96)
+                GenNames = DSScircuit.Generators.AllNames
+                PVNames = DSScircuit.PVSystems.AllNames
+
+                # solver for-loop
+                for t in range(96):
+                    gen_p = 0
+                    gen_q = 0
+                    DSScircuit.Solution.Solve()
+                    if GenNames[0] != 'NONE':
+                        for i in GenNames:  # extract power from existing generators
+                            DSScircuit.setActiveElement('generator.' + i)
+                            p = DSScircuit.ActiveElement.Powers
+                            for w in range(0, len(p), 2):
+                                gen_p += -p[w]
+                                gen_q += -p[w+1]
+                        gen_powers[t] += gen_p
+                        gen_rpowers[t] += gen_q
+                    if PVNames[0] != 'NONE':
+                        for i in PVNames:  # extract power from existing PVSystems
+                            DSScircuit.setActiveElement('PVSystem.' + i)
+                            p = DSScircuit.ActiveElement.Powers
+                            for w in range(0, len(p), 2):
+                                gen_p += -p[w]
+                                gen_q += -p[w + 1]
+                        gen_powers[t] += gen_p
+                        gen_rpowers[t] += gen_q
+
+                DSSprogress.PctProgress = 20
+                errorP = 0.003  # Maximum desired correction error for active power
+                errorQ = 0.01  # Maximum desired correction error for reactive power
+                max_it_correction = 15  # Maximum number of allowed iterations
+                study = 'daily'  # Study type for PQ_corrector
+
+                # load allocation algorithm
+                [DSScircuit, errorP_i, errorQ_i, temp_powersP, temp_powersQ, kW_sim, kVAr_sim] = auxfcns.PQ_corrector(
+                    DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it_correction,
+                    DP_to_be_matched, DQ_to_be_matched, dailydate, study, dir_network, tx_modelling, 1, firstLine,
+                    self.substation, line_tx_definition, gen_powers, gen_rpowers)
+
+                DSSprogress.PctProgress = 50
+                ################################################################
+                DSScircuit.Monitors.ResetAll()
+                # post load allocation simulation
+                DSStext.Command = 'clear'  # clean previous circuits
+                DSStext.Command = 'New Circuit.Circuito_Distribucion_Daily'  # create a new circuit
+                DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # master file compilation
+                DSStext.Command = 'Set mode = daily'  # daily simulation mode
+                DSStext.Command = 'Set number= 1'  ## steps by solve
+                DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s
+                DSStext.Command = 'Set time=(0,0)'  # Set the start simulation time
+                if tx_modelling and self.substation != 'Auto':
+                    DSStext.Command = line_tx_definition
+
+                # add pvsystems if checked
+                if self.dlg.PV.isChecked():
+                    if self.dlg.checkBox_PV_res.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity, pv_information, name_file_created, "R",
+                                                     pv_study_type)
+
+                    if self.dlg.checkBox_PV_gen.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity_gen, pv_information_gen, name_file_created, "C",
+                                                     pv_study_type)
+
+                    if self.dlg.checkBox_PV_TMT.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity_TMT, pv_information_TMT, name_file_created, "TMT",
+                                                     pv_study_type)
+
+                    for pv in range(len(PVS)):
+                        if PVS[pv] == "Error":  # exit if an error occurred
+                            return
+                        DSStext.Command = PVS[pv]
+                        # print(PVS[pv])
+                        # DSStext.Command = 'solve'
+                    DSSprogress.PctProgress = 60
+
+                DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the first MV line to monitor P and Q
+                # calc pu voltages
+                DSStext.Command = 'calcvoltagebases'
+                # node voltages lists
+                nodeVoltages_ph1 = []
+                nodeVoltages_ph2 = []
+                nodeVoltages_ph3 = []
+                # other lists
+                currentList = []
+                lossesWList = list()
+                # current simulation powers
+                temp_powersP = []
+                temp_powersQ = []
+
+                buses = DSScircuit.ALLBusNames  # all buses names
+                unbalance = {}
+                orderedUnbalance = OrderedDict()
+
+                for t in range(96):
+                    DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[t])  # set kW corrector
+                    DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[t])  # set kVAr corrector
+                    DSScircuit.Solution.Solve()  # solve the circuit
+                    if t == 0:  # set pu voltages
+                        DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
+                        DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
+
+                    DSScircuit.setActiveElement('line.' + firstLine)
+                    temp_powers = DSScircuit.ActiveElement.Powers  # extract power from first line
+                    temp_powersP.append((temp_powers[2] + temp_powers[4] + temp_powers[0]))
+                    temp_powersQ.append((temp_powers[3] + temp_powers[5] + temp_powers[1]))
+
+                    if self.dlg.checkBoxLosses.isChecked():  # append losses for every instant
+                        lossesWList.append(DSScircuit.Losses[0] / 1000)
+
+                    if self.dlg.checkBoxUnbalance.isChecked():  # calc voltage unbalances
+                        orderedUnbalance = auxfcns.unbalance(self, DSScircuit, buses, unbalance, orderedUnbalance)
+
+                    # save on results shape
+                    if self.dlg.checkBox_capas.isChecked():
+                        if t == 0:
+                            # node voltages for every instant
+                            nodeNames_ph1 = DSScircuit.AllNodeNamesByPhase(1)
+                            nodeNames_ph2 = DSScircuit.AllNodeNamesByPhase(2)
+                            nodeNames_ph3 = DSScircuit.AllNodeNamesByPhase(3)
+                            lineNames = DSScircuit.Lines.allnames  # all lines names
+                            normalAmpsDic = auxfcns.normalAmps(DSScircuit, lineNames)  # all lines ampacities
+                            auxfcns.newShape(self, lineNames, 'lineCurrents')  # update/create currents shape
+                        nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)])  # Buses pu voltages ph1
+                        nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)])  # Buses pu voltages ph2
+                        nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)])  # Buses pu voltages ph3
+                        currentList.append(
+                            auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic,
+                                                 study))  ##Normalized currents
+
+                DSSprogress.PctProgress = 70
+
+                # Results shapes update
+                if self.dlg.checkBox_capas.isChecked():
+                    auxfcns.busVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nodeNames_ph1,
+                                     nodeNames_ph2, nodeNames_ph3, name_file_created, study)  # buses shapes
+                    DSSprogress.PctProgress = 80
+                    auxfcns.lineCurrentsResults(self, lineNames, currentList, study)  # currents shape
+                    DSSprogress.PctProgress = 85
+                    auxfcns.trafosLoad(self, DSScircuit, DSStext, study, name_file_created)  # traf overload shape
+                    DSSprogress.PctProgress = 90
+
+                # Aparent power calculation
+                S_sim = np.sqrt(np.power(temp_powersP, 2) + np.power(temp_powersQ, 2))
+                SabcMC.append(S_sim)
+                # P, Q and S from substation curve
+                P_real = [float(x) for x in DP_to_be_matched]
+                Q_real = [float(x) for x in DQ_to_be_matched]
+                S_real = np.sqrt(np.power(P_real, 2) + np.power(Q_real, 2))
+                # results output path
+                final_output_folder = output_folder + '/Daily/'
+                if not os.path.exists(final_output_folder):
+                    os.makedirs(final_output_folder)
+
+                # Run Monte Carlo Simulations
+                for MC_iteration in range(int(number_simulations)):
+
+                    # Generate a series of dates (these are in matplotlib's internal date format)
+                    hours = mdates.drange(dt.datetime(2015, 1, 1), dt.datetime(2015, 1, 2), dt.timedelta(minutes=15))
+
+                    # Tell matplotlib to interpret the x-axis values as dates
+                    fmtr = mdates.DateFormatter("%H:%M")
+                    # Aparent power graph creation
+                    fig1 = plt.figure(1)
+                    ax = plt.gca()
+                    ax.plot(hours, S_real, label=QCoreApplication.translate('graphs', u'Real'))
+                    ax.plot(hours, S_sim, label=QCoreApplication.translate('graphs', u'Simulación'))
+                    ax.xaxis.set_major_formatter(fmtr)
+                    ax.set_xlabel(QCoreApplication.translate('graphs', u'Hora'))
+                    ax.set_title(QCoreApplication.translate('graphs', u'Potencia Aparente'))
+                    DSScircuit.Monitors.ResetAll()
+                    # Real power graph creation
+                    fig2 = plt.figure(2)
+                    ax = plt.gca()
+                    ax.plot(hours, P_real, label=QCoreApplication.translate('graphs', u'Real'))
+                    ax.plot(hours, temp_powersP, label=QCoreApplication.translate('graphs', u'Simulación'))
+                    ax.xaxis.set_major_formatter(fmtr)
+                    ax.set_xlabel(QCoreApplication.translate('graphs', u'Hora'))
+                    ax.set_title(QCoreApplication.translate('graphs', u'Potencia Real'))
+                    DSScircuit.Monitors.ResetAll()
+                    # Reactive power graph creation
+                    fig3 = plt.figure(3)
+                    ax = plt.gca()
+                    ax.plot(hours, Q_real, label=QCoreApplication.translate('graphs', u'Real'))
+                    ax.plot(hours, temp_powersQ, label=QCoreApplication.translate('graphs', u'Simulación'))
+                    ax.xaxis.set_major_formatter(fmtr)
+                    ax.set_xlabel(QCoreApplication.translate('graphs', u'Hora'))
+                    ax.set_title(QCoreApplication.translate('graphs', u'Potencia Reactiva'))
+                    DSScircuit.Monitors.ResetAll()
+
+                    # losses graph creation
+                    if self.dlg.checkBoxLosses.isChecked():
+                        fig4 = plt.figure(4)
+                        ax = plt.gca()
+                        ELP = np.round(np.sum(lossesWList) * .25, 2)
+                        ax.plot(hours, lossesWList, label=str(ELP) + ' kWh')
+                        ax.xaxis.set_major_formatter(fmtr)
+                        ax.set_xlabel(QCoreApplication.translate('graphs', u'Hora'))
+                        ax.set_title(QCoreApplication.translate('graphs', u'Pérdidas Reales'))
+                        # fig4 = plt.figure(4)
+                        # ELQ = np.round(np.sum(lossesQList) * .25,2)
+                        # plt.plot(lossesQList, label=QCoreApplication.translate('graphs', u'Reactiva [kVAr], ') + str(ELQ) + ' kVArh')
+                        DSScircuit.Monitors.ResetAll()
+
+                DSSprogress.PctProgress = 100
+                # aparent power graph
+                plt.figure(1)
+                plt.xticks(np.arange(min(hours), max(hours) + 0.04166666663 * 2, 0.04167 * 3))
+                plt.xlim([hours[0], hours[len(hours) - 1]])
+                # plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
+                plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Aparente [kVA]'))  # 'Aparent Power [kVA]'
+                plt.tight_layout()
+                plt.legend(fontsize=8, loc=2)
+                fig1.show()
+                # real power graph
+                plt.figure(2)
+                plt.xticks(np.arange(min(hours), max(hours) + 0.04166666663 * 2, 0.04167 * 3))
+                plt.xlim([hours[0], hours[len(hours) - 1]])
+                # plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
+                plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Activa [kW]'))  # 'Active Power [kW]'
+                plt.tight_layout()
+                plt.legend(fontsize=8, loc=2)
+                fig2.show()
+                # reactive power graph
+                plt.figure(3)
+                plt.xticks(np.arange(min(hours), max(hours) + 0.04166666663 * 2, 0.04167 * 3))
+                plt.xlim([hours[0], hours[len(hours) - 1]])
+                # plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
+                plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Reactiva [kVAr]'))  # 'Reactive Power [kVAr]'
+                plt.tight_layout()
+                plt.legend(fontsize=8, loc=2)
+                fig3.show()
+
+                # losses graph
+                if self.dlg.checkBoxLosses.isChecked():
+                    plt.figure(4)
+                    plt.xticks(np.arange(min(hours), max(hours) + 0.04166666663 * 2, 0.04167 * 3))
+                    plt.xlim([hours[0], hours[len(hours) - 1]])
+                    # plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
+                    plt.ylabel(
+                        QCoreApplication.translate('graphs', u'Pérdidas Activas [kW]'))  # 'Reactive Power [kVAr]'
+                    plt.tight_layout()
+                    plt.legend(fontsize=8, loc=2)
+                    fig4.show()
+                    fig4.savefig(final_output_folder + '/' + network + '_Losses_' + str_time + '.pdf',
+                                 format='pdf',
+                                 dpi=6000)
+                    csvFile = final_output_folder + '/' + network + '_Losses_' + str_time + '.csv'
+                    with open(csvFile, 'w') as f:
+                        w = csv.writer(f, lineterminator='\n')
+                        #w.writerow(["Losses (kW)"])
+                        for row in lossesWList:
+                            line = str(row)
+                            w.writerow([line])
+
+                # voltage unbalance graph
+                if self.dlg.checkBoxUnbalance.isChecked():
+                    x, y = zip(*orderedUnbalance.items())
+
+                    x_labels = []  # create an empty list to store the labels
+                    ticksIndex = np.arange(0, len(x), len(x) / 7, int)
+                    for key in ticksIndex:  # buses names for graph's ticks
+                        x_labels.append(x[key])
+
+                    fig5 = plt.figure(5)
+                    fig5, ax = plt.subplots()
+                    plt.plot(y, label=QCoreApplication.translate('graphs', u'Desbalance'))
+                    DSScircuit.Monitors.ResetAll()
+                    # plt.xlim([0, 96])
+                    ax.set_xticks(ticksIndex)
+                    ax.set_xticklabels(x_labels, rotation=90)
+                    plt.xlabel(QCoreApplication.translate('graphs', u'Barras'))
+                    plt.ylabel(
+                        QCoreApplication.translate('graphs', u'Desbalance (%)'))
+                    plt.legend(fontsize=8, loc=2)
+                    plt.title(QCoreApplication.translate('graphs', u'Desbalance de tensión'))
+                    plt.tight_layout()
+                    fig5.show()
+                    fig5.savefig(final_output_folder + '/' + network + '_Unbalance_' + str_time + '.pdf',
+                                 format='pdf',
+                                 dpi=6000)
+                    csvFile = final_output_folder + '/' + network + '_Unbalance_' + str_time + '.csv'
+                    with open(csvFile, 'w') as f:
+                        w = csv.writer(f, lineterminator='\n')
+                        w.writerow(["Bus", "Unbalance (%)"])
+                        for row in range(len(x)):
+                            #line = str(x[row]) + "," + str(y[row])
+                            w.writerow([str(x[row]), str(y[row])])
+                # real power figure creation
+                fig2.savefig(final_output_folder + '/' + network + '_MC_Result_plot_' + str_time + '.pdf', format='pdf',
+                             dpi=6000)
+
+                # powers: csv file creation
+                csvFile = final_output_folder + '/' + network + '_Powers_' + str_time + '.csv'
+                with open(csvFile, 'w') as f:
+                    w = csv.writer(f, lineterminator='\n')
+                    w.writerow(["P (kW)", "Q (kVAr)"])
+                    for row in range(96):
+                        lineP = str(temp_powersP[row])
+                        lineQ = str(temp_powersQ[row])
+                        w.writerow([lineP, lineQ])
+
+                tfinal_daily = time.time() - tinitial_daily
+                DSSprogress.Close()
+                if not self.dlg.powerflow_snapshot.isChecked() and not self.dlg.short_circuit.isChecked() \
+                        and not self.dlg.harmonics.isChecked() and not self.dlg.powerflow_yearly.isChecked():
+                    QMessageBox.information(None, QCoreApplication.translate('dialog', "Simulacion Diaria Terminada"), \
+                                            QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
+                                                tfinal_daily + time_common_for_all) + " s" + "\n" + \
+                                            QCoreApplication.translate('dialog',
+                                                                       "Los archivos han sido guardados en:") + output_folder)
+                os.system('clear')
+
+            ###################################################################################
+            #################################      YEARLY      ################################
+            ###################################################################################
+            # yearly power flow simulation routine
+            if self.dlg.powerflow_yearly.isChecked():
+                self.progress.show()
+                self.progress.progressBar.setValue(0)
+
+                tinitial_yearly = time.time() # yearly simulation init time
+                yearly_resolution = self.dlg.lineEdit_yearly.text().upper() # yearly simulation resolution
+                if not yearly_resolution:  # default: 1h
+                    yearly_resolution = '1'
+
+                final_output_folder = output_folder + '/Yearly/'
+                if not os.path.exists(final_output_folder):
+                    os.makedirs(final_output_folder)
+
+                #
+                lossesWList = list()
+                # lossesQList = list()
+                SabcMC = []
+                DP_to_be_matched = []
+                DQ_to_be_matched = []
+                steps = 4 * int(yearly_resolution)  # *4 because substation info have 15min steps
+                for i in range(1, len(circuit_demand), steps):
+                    temp_a = circuit_demand[i][0]
+                    DP_to_be_matched.append(circuit_demand[i][2])
+                    DQ_to_be_matched.append(circuit_demand[i][3])
+
+                DSSprogress.PctProgress = 5
+                self.progress.progressBar.setRange(0, (35040 / steps) + 100)
+                DSStext.Command = 'clear' # clean previous circuits
+                DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot' # create a new circuit
+                DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
+                DSStext.Command = 'Set mode=yearly'  # Type of Simulation
+                DSStext.Command = 'Set number=1'  # Number of steps to be simulated
+                DSStext.Command = 'Set h=' + yearly_resolution + 'h'
+                # DSStext.Command = 'Solve'
+                DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the transformer secondary side to monitor P and Q
+                if tx_modelling and self.substation != 'Auto':
+                    DSStext.Command = line_tx_definition
+
+                # generators powers arrays
+                gen_powers = np.zeros(35040 / steps)
+                gen_rpowers = np.zeros(35040 / steps)
+                GenNames = DSScircuit.Generators.AllNames
+                PVNames = DSScircuit.PVSystems.AllNames
+
+                for t in range(35040 / steps):
+                    gen_p = 0
+                    gen_q = 0
+                    DSScircuit.Solution.Solve()
+                    if GenNames[0] != 'NONE': # extract power from existing generators
+                        for i in GenNames:
+                            DSScircuit.setActiveElement('generator.' + i)
+                            p = DSScircuit.ActiveElement.Powers
+                            for w in range(0, len(p), 2):
+                                gen_p += -p[w]
+                                gen_q += -p[w + 1]
+                        gen_powers[t] += gen_p
+                        gen_rpowers[t] += gen_q
+                    if PVNames[0] != 'NONE': # extract power from existing PVSystems
+                        for i in PVNames:
+                            DSScircuit.setActiveElement('PVSystem.' + i)
+                            p = DSScircuit.ActiveElement.Powers
+                            for w in range(0, len(p), 2):
+                                gen_p += -p[w]
+                                gen_q += -p[w + 1]
+                        gen_powers[t] += gen_p
+                        gen_rpowers[t] += gen_q
+
+                DSSprogress.PctProgress = 20
+                self.progress.progressBar.setValue(100)
+
+                errorP = 0.003  # Maximum desired correction error for active power
+                errorQ = 0.001  # Maximum desired correction error for reactive power
+                max_it_correction = 100  # Maximum number of allowed iterations
+                study = 'yearly'  # Study type for PQ_corrector
+
+                # load allocation algorithm
+                [DSScircuit, errorP_i, errorQ_i, temp_powersP, temp_powersQ, kW_sim,
+                 kVAr_sim] = auxfcns.PQ_corrector(DSSprogress,
+                                                  DSScircuit, DSStext, errorP, errorQ, max_it_correction,
+                                                  DP_to_be_matched, DQ_to_be_matched, '000000', study, dir_network,
+                                                  tx_active, steps, firstLine, self.substation, line_tx_definition, gen_powers, gen_rpowers)
+
+                DSSprogress.PctProgress = 50
+
+                ################################################################
+                DSScircuit.Monitors.ResetAll()
+                DSStext.Command = 'clear'  # clean previous circuits
+                DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'  # create a new circuit
+                DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
+                DSStext.Command = 'Set mode=yearly'  # Type of Simulation
+                DSStext.Command = 'Set number=1'  # Number of steps to be simulated
+                DSStext.Command = 'Set h=' + yearly_resolution + 'h'  # simulation resolution, in hours
+                # DSStext.Command = 'Solve'
+                DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the first line to monitor P and Q
+                DSStext.Command = 'calcvoltagebases'  # calc pu voltages
+                if tx_modelling and self.substation != 'Auto':
+                    DSStext.Command = line_tx_definition  # edit or add a substation transformer
+
+                # Add PV systems with pv allocation algorithm
+                if self.dlg.PV.isChecked():
+                    if self.dlg.checkBox_PV_res.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity, pv_information, name_file_created, "R",
+                                                     pv_study_type)
+
+                    if self.dlg.checkBox_PV_gen.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity_gen, pv_information_gen, name_file_created, "C",
+                                                     pv_study_type)
+
+                    if self.dlg.checkBox_PV_TMT.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity_TMT, pv_information_TMT, name_file_created, "TMT",
+                                                     pv_study_type)
+
+                    for pv in range(len(PVS)):
+                        if PVS[pv] == "Error":  # exit if an error occurred
+                            return
+                        DSStext.Command = PVS[pv]
+                        # print(PVS[pv])
+                        # DSStext.Command = 'solve'
+                DSSprogress.PctProgress = 60
+                # Iteración de control
+                temp_powersP = []
+                temp_powersQ = []
+
+                # voltage unbalance init
+                buses = DSScircuit.ALLBusNames
+                unbalance = {}
+                orderedUnbalance = OrderedDict()
+
+                for t in range(35040 / steps):
+                    self.progress.progressBar.setValue(100 + t)
+                    DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[t])  # kW corrector
+                    DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[t])  # kVAr corrector
+                    DSScircuit.Solution.Solve()
+                    DSScircuit.setActiveElement('line.' + firstLine)
+                    temp_powers = DSScircuit.ActiveElement.Powers  # circuit powers at instant t
+                    temp_powersP.append((temp_powers[2] + temp_powers[4] + temp_powers[0]))
+                    temp_powersQ.append((temp_powers[3] + temp_powers[5] + temp_powers[1]))
+                    # circuit losses at instant t
+                    if self.dlg.checkBoxLosses.isChecked():
+                        lossesWList.append(DSScircuit.Losses[0] / 1000)
+                        # lossesQList.append(DSScircuit.Losses[1] / 1000)
+                    # voltage unbalance at instant t
+                    if self.dlg.checkBoxUnbalance.isChecked():
+                        orderedUnbalance = auxfcns.unbalance(self, DSScircuit, buses, unbalance, orderedUnbalance)
+                DSSprogress.PctProgress = 80
+                # aparent power calc
+                S_sim = np.sqrt(np.power(temp_powersP, 2) + np.power(temp_powersQ, 2))
+                SabcMC.append(S_sim)
+
+                P_real = [float(x) for x in DP_to_be_matched]
+                Q_real = [float(x) for x in DQ_to_be_matched]
+                S_real = np.sqrt(np.power(P_real, 2) + np.power(Q_real, 2))
+
+                # Run Monte Carlo Simulations
+                for MC_iteration in range(int(number_simulations)):
+
+                    # aparent power graph init
+                    fig1 = plt.figure(1)
+                    plt.plot(S_real, label=QCoreApplication.translate('graphs', u'Real'))
+                    fig1 = plt.figure(1)
+                    plt.plot(S_sim, label=QCoreApplication.translate('graphs', u'Simulación'))
+                    plt.title(QCoreApplication.translate('graphs', u'Potencia Aparente'))
+                    DSScircuit.Monitors.ResetAll()
+                    # real power graph init
+                    fig2 = plt.figure(2)
+                    plt.plot(P_real, label=QCoreApplication.translate('graphs', u'Real'))
+                    fig2 = plt.figure(2)
+                    plt.plot(temp_powersP, label=QCoreApplication.translate('graphs', u'Simulación'))
+                    plt.title(QCoreApplication.translate('graphs', u'Potencia Real'))
+                    DSScircuit.Monitors.ResetAll()
+                    # reactive power graph init
+                    fig3 = plt.figure(3)
+                    plt.plot(Q_real, label=QCoreApplication.translate('graphs', u'Real'))
+                    fig3 = plt.figure(3)
+                    plt.plot(temp_powersQ, label=QCoreApplication.translate('graphs', u'Simulación'))
+                    plt.title(QCoreApplication.translate('graphs', u'Potencia Reactiva'))
+                    DSScircuit.Monitors.ResetAll()
+                    # losses graph init
+                    if self.dlg.checkBoxLosses.isChecked():
+                        fig4 = plt.figure(4)
+                        ELP = np.round(np.sum(lossesWList) * int(yearly_resolution), 2)
+                        plt.plot(lossesWList,
+                                 label=str(ELP) + ' kWh')
+                        plt.title(QCoreApplication.translate('graphs', u'Pérdidas Reales'))
+                        # fig4 = plt.figure(4)
+                        # ELQ = np.round(np.sum(lossesQList) * int(yearly_resolution),2)
+                        # plt.plot(lossesQList, label=QCoreApplication.translate('graphs', u'Reactiva [kVAr], ') + str(ELQ) + ' kVArh')
+                        DSScircuit.Monitors.ResetAll()
+
+                DSSprogress.PctProgress = 90
+
+                # aparent power graph
+                plt.figure(1)
+                plt.xlim([0, 35040 / steps])
+                plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
+                plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Aparente [kVA]'))  # 'Aparent Power [kVA]'
+                plt.tight_layout()
+                plt.legend(fontsize=8, loc=2)
+                fig1.show()
+                # real power graph
+                plt.figure(2)
+                plt.xlim([0, 35040 / steps])
+                plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
+                plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Activa [kW]'))  # 'Active Power [kW]'
+                plt.tight_layout()
+                plt.legend(fontsize=8, loc=2)
+                fig2.show()
+                # reactive power graph
+                plt.figure(3)
+                plt.xlim([0, 35040 / steps])
+                plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
+                plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Reactiva [kVAr]'))  # 'Reactive Power [kVAr]'
+                plt.tight_layout()
+                plt.legend(fontsize=8, loc=2)
+                fig3.show()
+                # results final path
+                final_output_folder = output_folder + '/Yearly/'
+                if not os.path.exists(final_output_folder):
+                    os.makedirs(final_output_folder)
+                # losses graph
+                if self.dlg.checkBoxLosses.isChecked():
+                    plt.figure(4)
+                    plt.xlim([0, 96])
+                    plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
+                    plt.ylabel(
+                        QCoreApplication.translate('graphs', u'Pérdidas Activas [kW]'))  # 'Reactive Power [kVAr]'
+                    plt.tight_layout()
+                    plt.legend(fontsize=8, loc=2)
+                    fig4.show()
+                    fig4.savefig(final_output_folder + '/' + network + '_Losses_' + str_time + '.pdf',
+                                 format='pdf',
+                                 dpi=6000)
+
+                # voltage unbalance graph and csv
+                if self.dlg.checkBoxUnbalance.isChecked():
+                    x, y = zip(*orderedUnbalance.items())
+                    x_labels = []  # create an empty list to store the labels
+                    ticksIndex = np.arange(0, len(x), len(x) / 7, int)
+                    for key in ticksIndex:  # buses names for graph ticks
+                        x_labels.append(x[key])
+                    fig5 = plt.figure(5)
+                    fig5, ax = plt.subplots()
+                    plt.plot(y, label=QCoreApplication.translate('graphs', u'Desbalance'))
+                    DSScircuit.Monitors.ResetAll()
+                    ax.set_xticks(ticksIndex)
+                    ax.set_xticklabels(x_labels, rotation=90)
+                    plt.xlabel(QCoreApplication.translate('graphs', u'Barras'))
+                    plt.ylabel(
+                        QCoreApplication.translate('graphs', u'Desbalance (%)'))
+                    plt.legend(fontsize=8, loc=2)
+                    plt.tight_layout()
+                    fig5.show()
+                    fig5.savefig(final_output_folder + '/' + network + '_Unbalance_' + str_time + '.pdf',
+                                 format='pdf',
+                                 dpi=6000)
+                    csvFile = final_output_folder + '/' + network + '_Unbalance_' + str_time + '.csv'
+                    with open(csvFile, 'w') as f:  # write csv file
+                        w = csv.writer(f, lineterminator='\n')
+                        w.writerow(["Bus,Unbalance (%)"])
+                        for row in range(len(x)):
+                            line = str(x[row]) + "," + str(y[row])
+                            w.writerow([line])
+                DSSprogress.PctProgress = 100
+                # real power figure creation
+                fig2.savefig(final_output_folder + '/' + network + '_MC_Result_plot_' + str_time + '.pdf', format='pdf',
+                             dpi=6000)
+
+                # powers: csv file creation
+                csvFile = final_output_folder + '/' + network + '_Powers_' + str_time + '.csv'
+                with open(csvFile, 'w') as f:
+                    w = csv.writer(f, lineterminator='\n')
+                    w.writerow(["P (kW)", "Q (kVAr)"])
+                    for row in range(35040 / steps):
+                        lineP = str(temp_powersP[row])
+                        lineQ = str(temp_powersQ[row])
+                        w.writerow([lineP, lineQ])
+                DSSprogress.Close()
+                self.progress.show()
+                tfinal_yearly = time.time() - tinitial_yearly  # yearly simulation end time
+                if not self.dlg.powerflow_snapshot.isChecked() and not self.dlg.powerflow_daily.isChecked() \
+                        and not self.dlg.short_circuit.isChecked() and not self.dlg.harmonics.isChecked():
+                    QMessageBox.information(None, QCoreApplication.translate('dialog', "Simulacion Anual Terminada"), \
+                                            QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
+                                                tfinal_yearly + time_common_for_all) + " s" + "\n" + \
+                                            QCoreApplication.translate('dialog',
+                                                                       "Los archivos han sido guardados en:") + output_folder)
+                os.system('clear')
+
+            ###################################################################################
+            #############################      SHORT CIRCUIT      #############################
+            ###################################################################################
+            # short circuit simulation routine
+            if self.dlg.short_circuit.isChecked():
+                tinitial_short_circuit = time.time()
+
+                DSSprogress.Show()
+                DSSprogress.Caption = QCoreApplication.translate('progress', u'Short Circuit')
+                DSSprogress.PctProgress = 0
+
+                # simulation date
+                scdate = self.dlg.lineEdit_sc_date.text().upper()
+                if not scdate: # if empty: representative day selection
+                    scdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
+                # simulation time
+                sctime = self.dlg.lineEdit_sc_time.text()  # .upper()
+                if not sctime:
+                    sctime = def_time  # Default is 6pm
+
+                h, m = sctime.split(':')
+                if m is not '00' or '15' or '30' or '45':  # round time to 15min multiples
+                    if int(m) <= 7:
+                        m = '00'
+                    elif int(m) <= 22:
+                        m = '15'
+                    elif int(m) <= 37:
+                        m = '30'
+                    elif int(m) <= 52:
+                        m = '45'
+                    else:
+                        m = '00'
+                        h = str(int(h) + 1)
+                        if int(h) == 24:  # last rount stays on 23:45
+                            h = '23'
+                            m = '45'
+                if len(list(h)) < 2:
+                    h = '0' + h
+                sctime = h + ':' + m
+
+                daily_strtime = str(scdate.replace('/', '') + sctime.replace(':', ''))
+                hora_sec = sctime.split(':')
+                for i in range(len(circuit_demand)):
+                    temp_a = circuit_demand[i][0]  # day
+                    temp_b = circuit_demand[i][1]  # hour
+                    if str(temp_a.replace('/', '') + temp_b.replace(':', '')) == daily_strtime:
+                        P_to_be_matched = circuit_demand[i][2]  # Active power
+                        Q_to_be_matched = circuit_demand[i][3]  # Reactive power
+
+                # SC bus
+                short_circuit_bus = self.dlg.lineEdit_short_circuit.currentText().upper()
+
+                # SC 3ph
+                terminales = ''
+                terminales2 = ''
+                terminales3 = ''
+                short_circuit_phases = '3'
+                if self.dlg.checkBox_SC_phaseA.isChecked() == True and self.dlg.checkBox_SC_phaseB.isChecked() == True and self.dlg.checkBox_SC_phaseC.isChecked() == True:
+                    short_circuit_phases = '3'
+                    terminales = '.1.2.3'
+                    terminales2 = '.0.0.0'
+                    if self.dlg.checkBox_SC_phaseLL.isChecked() == True:  # line to line
+                        short_circuit_phases = '1'
+                        terminales = '.1'
+                        terminales2 = '.2'
+                        terminales3 = '.3'
+                # SC 2ph
+                elif self.dlg.checkBox_SC_phaseA.isChecked() == True and self.dlg.checkBox_SC_phaseB.isChecked() == True and self.dlg.checkBox_SC_phaseC.isChecked() == False:
+                    short_circuit_phases = '1'
+                    if self.dlg.checkBox_SC_phaseLL.isChecked() == True:  # line to line
+                        terminales = '.1'
+                        terminales2 = '.2'
+                    else:  # Line to Ground (LG)
+                        short_circuit_phases = '2'
+                        terminales = '.1.1'
+                        terminales2 = '.2.0'
+                elif self.dlg.checkBox_SC_phaseA.isChecked() == True and self.dlg.checkBox_SC_phaseB.isChecked() == False and self.dlg.checkBox_SC_phaseC.isChecked() == True:
+                    short_circuit_phases = '1'
+                    if self.dlg.checkBox_SC_phaseLL.isChecked() == True:  # line to line
+                        terminales = '.1'
+                        terminales2 = '.3'
+                    else:  # LG
+                        short_circuit_phases = '2'
+                        terminales = '.1.1'
+                        terminales2 = '.3.0'
+                elif self.dlg.checkBox_SC_phaseA.isChecked() == False and self.dlg.checkBox_SC_phaseB.isChecked() == True and self.dlg.checkBox_SC_phaseC.isChecked() == True:
+                    short_circuit_phases = '1'
+                    if self.dlg.checkBox_SC_phaseLL.isChecked() == True:  # line to line
+                        terminales = '.2'
+                        terminales2 = '.3'
+                    else:  # LG
+                        short_circuit_phases = '2'
+                        terminales = '.2.2'
+                        terminales2 = '.3.0'
+                # SC 1ph
+                elif self.dlg.checkBox_SC_phaseA.isChecked() == True and self.dlg.checkBox_SC_phaseB.isChecked() == False and self.dlg.checkBox_SC_phaseC.isChecked() == False:
+                    short_circuit_phases = '1'
+                    terminales = '.1'
+                    terminales2 = '.0'
+                elif self.dlg.checkBox_SC_phaseA.isChecked() == False and self.dlg.checkBox_SC_phaseB.isChecked() == True and self.dlg.checkBox_SC_phaseC.isChecked() == False:
+                    short_circuit_phases = '1'
+                    terminales = '.2'
+                    terminales2 = '.0'
+                elif self.dlg.checkBox_SC_phaseA.isChecked() == False and self.dlg.checkBox_SC_phaseB.isChecked() == False and self.dlg.checkBox_SC_phaseC.isChecked() == True:
+                    short_circuit_phases = '1'
+                    terminales = '.3'
+                    terminales2 = '.0'
+
+                # bus selection simplifier
+                if short_circuit_bus == QCoreApplication.translate('SC', "Todas las barras MT").upper():
+                    short_circuit_bus = QCoreApplication.translate('SC', 'MT')
+                elif short_circuit_bus == QCoreApplication.translate('SC', 'Todas las barras BT').upper():
+                    short_circuit_bus = QCoreApplication.translate('SC', 'BT')
+                elif short_circuit_bus == QCoreApplication.translate('SC', 'Todas las barras MT y BT').upper():
+                    short_circuit_bus = QCoreApplication.translate('SC', 'MT_BT')
+
+                # results output folder
+                final_output_folder = output_folder + '/Short_Circuit/' + 'BUS_' + str(short_circuit_bus) + '/'
+                if not os.path.exists(final_output_folder):
+                    os.makedirs(final_output_folder)
+                DSSprogress.PctProgress = 20
+
+                DSStext.Command = 'clear'  # clean previous circuits
+                DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'  # new circuit creation
+                DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
+                DSStext.Command = 'Set mode=daily'  # Type of Simulation
+                DSStext.Command = 'Set number=1'  # Number of steps to be simulated
+                DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation
+                DSStext.Command = 'Set time=(' + hora_sec[0] + ',' + hora_sec[1] + ')'  # Set the start simulation time
+                DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the transformer secondary side to monitor P and Q
+                if tx_modelling and self.substation != 'Auto':
+                    DSStext.Command = line_tx_definition
+                for MC_iteration in range(
+                        int(number_simulations)):  # Run Monte Carlo Simulations
+                    for t in range(1):  # Run the daily power flow for a particular moment
+                        DSScircuit.Solution.Solve()  # Initialization solution
+                        busNames = DSScircuit.ALLBusNames  # all buses names
+                        gen_p = 0
+                        gen_q = 0
+                        gen_powers = np.zeros(1)
+                        gen_rpowers = np.zeros(1)
+                        GenNames = DSScircuit.Generators.AllNames
+                        PVNames = DSScircuit.PVSystems.AllNames
+                        if GenNames[0] != 'NONE':  # existing distributed generators powers
+                            for i in GenNames:
+                                DSScircuit.setActiveElement('generator.' + i)
+                                p = DSScircuit.ActiveElement.Powers
+                                for w in range(0, len(p), 2):
+                                    gen_p += -p[w]
+                                    gen_q += -p[w + 1]
+                            gen_powers[t] += gen_p
+                            gen_rpowers[t] += gen_q
+                        if PVNames[0] != 'NONE': # existing PV systems powers
+                            for i in PVNames:
+                                DSScircuit.setActiveElement('PVSystem.' + i)
+                                p = DSScircuit.ActiveElement.Powers
+                                for w in range(0, len(p), 2):
+                                    gen_p += -p[w]
+                                    gen_q += -p[w + 1]
+                            gen_powers[t] += gen_p
+                            gen_rpowers[t] += gen_q
+
+                        errorP = 0.03  # Maximum desired correction error for active power
+                        errorQ = 0.1  # Maximum desired correction error for reactive power
+                        max_it_correction = 10  # Maximum number of allowed iterations
+                        study = 'snapshot'  # Study type for PQ_corrector
+
+                        # load allocation algorithm
+                        [DSScircuit, errorP_i, errorQ_i, temp_powersP, temp_powersQ, kW_sim,
+                         kVAr_sim] = auxfcns.PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ,
+                                                          max_it_correction,
+                                                          P_to_be_matched, Q_to_be_matched, hora_sec, study,
+                                                          dir_network, tx_modelling, 1, firstLine, self.substation,
+                                                          line_tx_definition, gen_powers, gen_rpowers)
+
+                    DSSprogress.PctProgress = 50
+                    # post load allocation simulation
+                    DSStext.Command = 'clear'  # clean previous circuits
+                    DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'  # new circuit creation
+                    DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
+                    DSStext.Command = 'Set mode=daily'  # Type of Simulation
+                    DSStext.Command = 'Set number=1'  # Number of steps to be simulated
+                    DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s)
+                    DSStext.Command = 'Set time=(' + hora_sec[0] + ',' + hora_sec[1] + ')'  # Set the simulation time
+                    # PV allocation algorithm
+                    if self.dlg.PV.isChecked():
+                        if self.dlg.checkBox_PV_res.isChecked():
+                            PVS += auxfcns.PV_allocation(total_capacity, pv_information, name_file_created, "R",
+                                                         pv_study_type)
+
+                        if self.dlg.checkBox_PV_gen.isChecked():
+                            PVS += auxfcns.PV_allocation(total_capacity_gen, pv_information_gen, name_file_created, "C",
+                                                         pv_study_type)
+
+                        if self.dlg.checkBox_PV_TMT.isChecked():
+                            PVS += auxfcns.PV_allocation(total_capacity_TMT, pv_information_TMT, name_file_created,
+                                                         "TMT",
+                                                         pv_study_type)
+
+                        for pv in range(len(PVS)):
+                            if PVS[pv] == "Error":  # exit if error occurred
+                                DSSprogress.Close()
+                                return
+                            DSStext.Command = PVS[pv]
+                        #QMessageBox.information(None, "Debug", PVS[0])
+                            # DSStext.Command = 'solve'
+                    DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the first line to monitor P and Q
+                    DSStext.Command = 'calcvoltagebases'  # pu voltages calc
+                    if tx_modelling and self.substation != 'Auto':
+                        DSStext.Command = line_tx_definition  # edit/create substation transformer
+                    # create node voltages lists
+                    nodeVoltages_ph1 = []
+                    nodeVoltages_ph2 = []
+                    nodeVoltages_ph3 = []
+                    currentList = []  # current list
+                    DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[0])  # set kW corrector
+                    DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[0])  # set kVAr corrector
+                    DSStext.Command = 'batchedit PVSystem..* %R=75'  # set %R to PV systems for 1.1 pu SC current
+                    DSStext.Command = 'batchedit PVSystem..* %X=75'  # set %X to PV systems for 1.1 pu SC current
+                    if not 5 < int(hora_sec[0]) < 18:
+                        DSStext.Command = 'batchedit PVSystem..* enabled=no'  # set PVSystem enable
+                    # set results output folder
+                    DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
+                    DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
+                    DSStext.Command = 'set datapath=' + final_output_folder
+                    DSScircuit.Solution.Solve()
+
+                    # create a new fault
+                    DSStext.Command = 'New Fault.F1'
+                    DSStext.Command = 'New Fault.F2'
+                    if short_circuit_bus == "":  # exit on empty information
+                        QMessageBox.information(None, QCoreApplication.translate('dialog',
+                                                                                 "Analisis de Corto Circuito Terminado"), \
+                                                QCoreApplication.translate('dialog', "No se ha seleccionado barra de estudio"))
+                        DSSprogress.Close()
+                        return
+                    elif short_circuit_bus == QCoreApplication.translate('SC', 'MT'):  # all MV buses simulation
+                        for i in busNames:
+
+                            if 'MV' in i.upper():
+                                DSStext.Command = 'Solve mode=dynamics stepsize=0.00002'
+                                sc_bus1 = i + terminales
+                                sc_bus2 = i + terminales2
+                                sc_bus3 = i + terminales3
+                                if self.dlg.checkBox_SC_phaseLL.isChecked() and short_circuit_phases == '2':
+                                    sc_bus2 = i + '.' + terminales.split('.')[2]
+
+                                # edit fault object
+                                DSStext.Command = 'Edit Fault.F1 phases=' + short_circuit_phases + ' Bus1=' + sc_bus1 + ' Bus2=' + sc_bus2 + ' R=0.002'
+                                if terminales3 != '':
+                                    DSStext.Command = 'Edit Fault.F2 phases=' + short_circuit_phases + ' Bus1=' + sc_bus2 + ' Bus2=' + sc_bus3 + ' R=0.002'
+                                DSStext.Command = 'Solve'
+                                DSStext.Command = 'Export Current ' + i + '.csv'
+                        DSSprogress.PctProgress = 70
+                    elif short_circuit_bus == QCoreApplication.translate('SC', 'BT'): # all LV buses simulation
+                        busNames = DSScircuit.ALLBusNames
+                        for i in busNames:
+
+                            if 'LV' in i.upper():
+                                DSStext.Command = 'Solve mode=dynamics stepsize=0.00002'
+                                sc_bus1 = i + terminales
+                                sc_bus2 = i + terminales2
+                                sc_bus3 = i + terminales3
+                                if self.dlg.checkBox_SC_phaseLL.isChecked() and short_circuit_phases == '2':
+                                    sc_bus2 = i + '.' + terminales.split('.')[2]
+                                # edit fault object
+                                DSStext.Command = 'Edit Fault.F1 phases=' + short_circuit_phases + ' Bus1=' + sc_bus1 + ' Bus2=' + sc_bus2 + ' R=0.002'
+                                if terminales3 != '':
+                                    DSStext.Command = 'Edit Fault.F2 phases=' + short_circuit_phases + ' Bus1=' + sc_bus2 + ' Bus2=' + sc_bus3 + ' R=0.002'
+                                DSStext.Command = 'Solve'
+                                DSStext.Command = 'Export Current ' + i + '.csv'
+                        DSSprogress.PctProgress = 80
+                    elif short_circuit_bus == QCoreApplication.translate('SC', 'MT_BT'): # all circuit buses simulation
+                        busNames = DSScircuit.ALLBusNames
+                        for i in busNames:
+
+                            DSStext.Command = 'Solve mode=dynamics stepsize=0.00002'
+                            sc_bus1 = i + terminales
+                            sc_bus2 = i + terminales2
+                            sc_bus3 = i + terminales3
+                            if self.dlg.checkBox_SC_phaseLL.isChecked() and short_circuit_phases == '2':
+                                sc_bus2 = i + '.' + terminales.split('.')[2]
+                            DSStext.Command = 'Edit Fault.F1 phases=' + short_circuit_phases + ' Bus1=' + sc_bus1 + ' Bus2=' + sc_bus2 + ' R=0.002'
+                            if terminales3 != '':
+                                DSStext.Command = 'Edit Fault.F2 phases=' + short_circuit_phases + ' Bus1=' + sc_bus2 + ' Bus2=' + sc_bus3 + ' R=0.002'
+                            DSStext.Command = 'Solve'
+                            DSStext.Command = 'Export Current ' + i + '.csv'
+                        DSSprogress.PctProgress = 90
+                    else:  # specific bus simulation
+
+                        DSStext.Command = 'Solve mode=dynamics stepsize=0.00002'
+                        i = short_circuit_bus
+                        sc_bus1 = i + terminales
+                        sc_bus2 = i + terminales2
+                        sc_bus3 = i + terminales3
+                        if self.dlg.checkBox_SC_phaseLL.isChecked() and short_circuit_phases == '2':
+                            sc_bus2 = i + '.' + terminales.split('.')[2]
+                        DSStext.Command = 'Edit Fault.F1 phases=' + short_circuit_phases + ' Bus1=' + sc_bus1 + ' Bus2=' + sc_bus2 + ' R=0.002'
+                        if terminales3 != '':
+                            DSStext.Command = 'Edit Fault.F2 phases=' + short_circuit_phases + ' Bus1=' + sc_bus2 + ' Bus2=' + sc_bus3 + ' R=0.002'
+                        DSStext.Command = 'Solve'
+                        DSStext.Command = 'Export Current ' + i + '.csv'
+
+                        if self.dlg.checkBox_capas.isChecked():
+
+                            nodeNames_ph1 = DSScircuit.AllNodeNamesByPhase(1)
+                            nodeNames_ph2 = DSScircuit.AllNodeNamesByPhase(2)
+                            nodeNames_ph3 = DSScircuit.AllNodeNamesByPhase(3)
+                            nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)])  # Buses pu voltages ph1
+                            nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)])  # Buses pu voltages ph2
+                            nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)])  # Buses pu voltages ph3
+                            # voltages shapes update
+                            auxfcns.busVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nodeNames_ph1,
+                                             nodeNames_ph2, nodeNames_ph3, name_file_created, 'shortcircuit')
+
+                        DSStext.Command = 'Visualize Currents Fault.F1'
+                        if terminales3 != '':
+                            DSStext.Command = 'Visualize Currents Fault.F2'
+                        DSSprogress.PctProgress = 100
+                    tfinal_short_circuit = time.time() - tinitial_short_circuit
+                    DSSprogress.Close()
+                    if not self.dlg.powerflow_snapshot.isChecked() and not self.dlg.powerflow_daily.isChecked() \
+                            and not self.dlg.harmonics.isChecked() and not self.dlg.powerflow_yearly.isChecked():
+                        QMessageBox.information(None, QCoreApplication.translate('dialog',
+                                                                                 "Analisis de Corto Circuito Terminado"), \
+                                                QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
+                                                    tfinal_short_circuit + time_common_for_all) + " s" + "\n" + \
+                                                QCoreApplication.translate('dialog',
+                                                                           "Los archivos han sido guardados en:") + output_folder)
+                    os.system('clear')
+
+            ###################################################################################
+            ###############################      HARMONICS      ###############################
+            ###################################################################################
+            # harmonics simulation routine
+            if self.dlg.harmonics.isChecked():
+                tinitial_harmonics = time.time()
+                counter = 0
+                harmonic_num = self.dlg.lineEdit_harmonics.text().upper()
+                DSSprogress.Show()
+                DSSprogress.Caption = QCoreApplication.translate('progress', u'Load Allocation')
+                DSSprogress.PctProgress = 0
+                # input harmonic numbers reading
+                try:
+                    harmonics, NumHarm = Harmonics.harmonic_choice(harmonic_num)
+                except ValueError:
+                    QMessageBox.critical(None, QCoreApplication.translate('dialog', "Error"),
+                                        QCoreApplication.translate('dialog',
+                                                                   u"No se pudo reconocer la cantidad de armónicos deseados"))
+                    return # exit on except
+
+                # spectrum creation
+                if self.dlg.checkBox_harm_res.isChecked():
+                    load_res_spectrum = self.dlg.lineEdit_res_spectrum.text()
+                    if not load_res_spectrum:
+                        QMessageBox.information(None, QCoreApplication.translate('dialog', u"Información Requerida"),
+                                                QCoreApplication.translate('dialog',
+                                                                           u"Seleccione el espectro de armónicos residencial") + '\n')
+                        return # exit on except
+
+                if self.dlg.checkBox_harm_gen.isChecked():
+                    load_gen_spectrum = self.dlg.lineEdit_gen_spectrum.text()
+                    if not load_gen_spectrum:
+                        QMessageBox.information(None, QCoreApplication.translate('dialog', u"Información Requerida"),
+                                                QCoreApplication.translate('dialog',
+                                                                           u"Seleccione el espectro de armónicos comercial e industrial") + '\n')
+                        return # exit on except
+
+                if self.dlg.checkBox_harm_TMT.isChecked():
+                    load_TMT_spectrum = self.dlg.lineEdit_TMT_spectrum.text()
+                    if not load_TMT_spectrum:
+                        QMessageBox.information(None,
+                                                QCoreApplication.translate('dialog', u"Información Requerida"),
+                                                QCoreApplication.translate('dialog',
+                                                                           u"Seleccione el espectro de armónicos TMT") + '\n')
+                        return  # exit on except
+
+
+
+                selected_parameter = 0;
+                harm_parameter = type_parameters[selected_parameter]  # always use GMM
+
+                # Date
+                harmonicdate = self.dlg.lineEdit_harmonic_date.text().upper()
+                if not harmonicdate:
+                    harmonicdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
+
+                harm_daily_date = str(harmonicdate.replace('/', ''))
+                ##################################
+                ##### HARMONIC SNAPSHOT ##########
+                ##################################
+
+                if self.dlg.snapshot.isChecked():
+                    harmonictime = self.dlg.lineEdit_harmonic_time.text().upper()
+                    if not harmonictime:
+                        harmonictime = def_time  # default: 18:00
+
+                    h, m = harmonictime.split(':')  # round hour to 10min multiples
+                    if list(m)[1] != '0':
+                        if int(list(m)[1]) <= 5:
+                            m = list(m)[0] + str(0)
+                        elif int(list(m)[1]) > 5:
+                            if int(list(m)[0]) < 5:
+                                m = list(m)[0] + str(int(list(m)[1]) + 1)
+                            else:
+                                h = list(h)[0] + str(int(list(h)[1]) + 1)
+                                if int(h) >= 24:
+                                    h = '00'
+                                m = '00'
+                        harmonictime = h + ':' + m
+                    H_Time = [harmonictime]
+
+                ##################################
+                ######## HARMONIC DAILY ##########
+                ##################################            
+
+                if self.dlg.daily.isChecked():
+                    H_Time = []  ## time array from 00:00:00 to 23:50:00, 10 minutes step
+                    for h in range(24):
+                        for m in range(6):
+                            if m == 0:
+                                if h < 10:
+                                    H_Time.append('0' + str(h) + ':00')
+                                else:
+                                    H_Time.append(str(h) + ':00')
+                            else:
+                                if h < 10:
+                                    H_Time.append('0' + str(h) + ':' + str(m * 10))
+                                else:
+                                    H_Time.append(str(h) + ':' + str(m * 10))
+
+                ##################################
+                ######### HARMONIC SIM ###########
+                ##################################
+                # real P, Q from substation
+                DP_to_be_matched = []
+                DQ_to_be_matched = []
+                for ij in range(len(circuit_demand)):
+                    temp_a = circuit_demand[ij][0]
+                    if str(temp_a.replace('/', '')) == str(harm_daily_date.replace('/', '')):
+                        DP_to_be_matched.append(circuit_demand[ij][2])
+                        DQ_to_be_matched.append(circuit_demand[ij][3])
+
+                DSStext.Command = 'clear'  # Clean previous circuits
+                DSStext.Command = 'New Circuit.Circuito_Distribucion_Harmonics'  # Create a new circuit
+                DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Master file compilation
+                DSStext.Command = 'set mode=daily'  # Daily sim for load allocation
+                DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the transformer secondary side to monitor P and Q
+                DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation
+                DSStext.Command = 'Set time=(0,0)'  # Set the start simulation time
+                if tx_modelling and self.substation != 'Auto':
+                    DSStext.Command = line_tx_definition  # Edit/create substation transformer
+
+                # dist gen powers init
+                gen_powers = np.zeros(96)
+                gen_rpowers = np.zeros(96)
+                GenNames = DSScircuit.Generators.AllNames
+                PVNames = DSScircuit.PVSystems.AllNames
+
+                for t in range(96):
+                    gen_p = 0
+                    gen_q = 0
+                    DSScircuit.Solution.Solve()
+                    if GenNames[0] != 'NONE':  # existing generators powers
+                        for i in GenNames:
+                            DSScircuit.setActiveElement('generator.' + i)
+                            p = DSScircuit.ActiveElement.Powers
+                            for w in range(0, len(p), 2):
+                                gen_p += -p[w]
+                                gen_q += -p[w + 1]
+                        gen_powers[t] += gen_p
+                        gen_rpowers[t] += gen_q
+                    if PVNames[0] != 'NONE':  # existing PVSystems powers
+                        for i in PVNames:
+                            DSScircuit.setActiveElement('PVSystem.' + i)
+                            p = DSScircuit.ActiveElement.Powers
+                            for w in range(0, len(p), 2):
+                                gen_p += -p[w]
+                                gen_q += -p[w + 1]
+                        gen_powers[t] += gen_p
+                        gen_rpowers[t] += gen_q
+
+                errorP = 0.03  # Maximum desired correction error for active power
+                errorQ = 0.1  # Maximum desired correction error for reactive power
+                max_it_correction = 10  # Maximum number of allowed iterations
+                study = 'daily'  # Study type for PQ_corrector
+                # load allocations algorithm
+                [DSScircuit, errorP_i, errorQ_i, temp_powersP, temp_powersQ, kW_sim, kVAr_sim] = auxfcns.PQ_corrector(
+                    DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it_correction,
+                    DP_to_be_matched, DQ_to_be_matched, harm_daily_date, study, dir_network, tx_modelling, 1, firstLine,
+                    self.substation, line_tx_definition, gen_powers, gen_rpowers)
+                DSSprogress.Close()
+                # interpolate from 96 pts to 144 pts
+                x_96 = np.arange(0, 96, 1)
+                x_144 = np.arange(0, 96, 0.67)
+                kW_sim_144 = np.interp(x_144, x_96, kW_sim)
+                kVAr_sim_144 = np.interp(x_144, x_96, kVAr_sim)
+
+                PQ_Time = []  ## time array from 00:00:00 to 23:50:00, 10 minutes step
+                i = 0
+                for h in range(24):
+                    for m in range(6):
+                        if m == 0:
+                            if h < 10:
+                                PQ_Time.append(['0' + str(h) + ':00', kW_sim_144[i], kVAr_sim_144[i]])
+                            else:
+                                PQ_Time.append([str(h) + ':00', kW_sim_144[i], kVAr_sim_144[i]])
+                        else:
+                            if h < 10:
+                                PQ_Time.append(['0' + str(h) + ':' + str(m * 10), kW_sim_144[i], kVAr_sim_144[i]])
+                            else:
+                                PQ_Time.append([str(h) + ':' + str(m * 10), kW_sim_144[i], kVAr_sim_144[i]])
+                        i += 1
+
+                PVS = []
+                readerPV = []
+
+                # PV allocation algorithm
+                if self.dlg.PV.isChecked():
+                    if self.dlg.checkBox_PV_res.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity, pv_information, name_file_created, "R",
+                                                     pv_study_type)
+
+                    if self.dlg.checkBox_PV_gen.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity_gen, pv_information_gen, name_file_created, "C",
+                                                     pv_study_type)
+
+                    if self.dlg.checkBox_PV_TMT.isChecked():
+                        PVS += auxfcns.PV_allocation(total_capacity_TMT, pv_information_TMT, name_file_created, "I",
+                                                     pv_study_type)
+                for pv in range(len(PVS)):
+                    if PVS[pv] == "Error":  # exit on error
+                        return
+
+                # results ouput folder
+                final_output_folder = output_folder + '\\Harmonics\\'
+                if not os.path.exists(final_output_folder):
+                    os.makedirs(final_output_folder)
+
+                if not self.dlg.transformer_modelling.isChecked():
+                    tx_conn_low = 'delta'
+                    line_tx_definition = ''
+                try:  # harmonic simulation
+                    Harmonics.harmonic_sim(self, NumHarm, harmonics, harmonicdate, H_Time, name_file_created,
+                                           type_parameters,
+                                           harm_parameter, dir_network, created_files, harm_daily_date,
+                                           frequency, volt_nom, phase_angle, line_tx_definition, circuit_demand,
+                                           DSStext, DSSprogress,
+                                           DSScircuit, final_output_folder, counter, tx_conn_low, PVS, readerPV,
+                                           str_time, tx_active, firstLine, PQ_Time, self.substation)
+                    tfinal_harmonics = time.time() - tinitial_harmonics
+                    QMessageBox.information(None,
+                                            QCoreApplication.translate('dialog', u"Análisis de armónicos terminado"),
+                                            QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
+                                                tfinal_harmonics + time_common_for_all) + " s" + "\n" + \
+                                            QCoreApplication.translate('dialog',
+                                                                       "Los archivos han sido guardados en:") + "\n" + output_folder)
+                except UnboundLocalError as e:
+                    print e
+                    QMessageBox.information(None, QCoreApplication.translate('dialog', u"Análisis de armónicos"),
+                                            QCoreApplication.translate('dialog',
+                                                                       "No se ha seleccionado el tipo de estudio"))
+                    os.system('clear')
+            pass
+            # simulations end
