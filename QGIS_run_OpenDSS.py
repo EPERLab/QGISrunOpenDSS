@@ -69,6 +69,7 @@ import fileinput
 
 from .evs_code.create_study_EVS import CreateEVDss #Para estudio random, por consumo o por probabilidad de EV
 from .evs_code.EVsFunctions import CreateList_SOC_t, update_storage #Para crear lista de dssnames y t's
+from .correct_date_time import correct_date, correct_hour #para corregir la fecha y tiempo
 
 QApplication.setStyle(QStyleFactory.create('WindowsVista'))  # <- Choose the style
 
@@ -164,6 +165,7 @@ class QGISrunOpenDSS(object):
         self.dlg.lineEdit_harmonic_date.clear()
         self.dlg.lineEdit_harmonic_time.clear()
         self.dlg.lineEdit_res_spectrum.clear()
+        
         
         #Flujo de potencia
         self.dlg.powerflow_yearly.toggled.connect( self.change_check_yearly_powerflow )
@@ -1595,7 +1597,6 @@ class QGISrunOpenDSS(object):
                 ############### Creación de capas de EVs ###############
                 ########################################################
                 ########################################################
-                self.name_dss_evshape = ""
                 #Elimina archivos previamente creados anteriormente por simulaciones de EVs aleatorias
                 study_types = ["random", "consum", "prob"]
                 name_dss_evshape = ""
@@ -1613,16 +1614,9 @@ class QGISrunOpenDSS(object):
                     if "outputqgis2opendss" in nombre:
                         name_output_azul = name
                         self.name_output_azul = name_output_azul
-                    if "_ev.dss" in nombre: #Busca el nombre del archivo de EVs creado por el azul (si es que existe)
-                        name_dss_evshape = name
-                        print("nombre ev azul = ", name_dss_evshape)
-                        
-                #Inicialización de vector de SOC_t
-                vector_soc_t = {}
-                for x in range(0,96):
-                    vector_soc_t[x] = {}   
-                if name_dss_evshape != "":
-                    vector_soc_t = CreateList_SOC_t( name_dss_evshape, vector_soc_t )
+                    if "_ev.dss" in nombre:
+                        name_ev_tmp = name
+                    
                 
                 #Plantel de buses
                 plantel = False
@@ -1636,6 +1630,8 @@ class QGISrunOpenDSS(object):
                         #Se fija si el plantel de buses está agregado a la salida del azul
                         if "plantelesbuses.dss" in linea_:
                             plantel = True
+                        if "_ev.dss" in linea_ and linea_[0] != "!": #Busca el nombre del archivo de EVs creado por el azul (si es que existe)
+                            name_dss_evshape = name_ev_tmp
                         for study in study_types:
                             name_search = "_ev" + str( study ) 
                             if name_search in linea_:
@@ -1643,6 +1639,13 @@ class QGISrunOpenDSS(object):
                         if bandera_study_types == False:
                             f.write(line)
                     f.truncate()
+                
+                #Inicialización de vector de SOC_t
+                vector_soc_t = {}
+                for x in range(0,96):
+                    vector_soc_t[x] = {}   
+                if name_dss_evshape != "":
+                    vector_soc_t = CreateList_SOC_t( name_dss_evshape, vector_soc_t )
                 
                 #Creación de EVs aleatorios
                 if self.dlg.EV.isChecked():
@@ -1980,11 +1983,13 @@ class QGISrunOpenDSS(object):
     
                     tinitial_snapshot = time.time() # time counter
                     snapshotdate = self.dlg.lineEdit_snapshot_date.text().upper()
+                    snapshotdate = correct_date( load_curve_circuit, snapshotdate )
                     if not snapshotdate:
                         snapshotdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
                     self.snapshotdate = snapshotdate
     
                     snapshottime = self.dlg.lineEdit_snapshot_time.text() # read sim hour
+                    snapshottime = correct_hour( load_curve_circuit, snapshottime )
     
                     if not snapshottime:
                         snapshottime = def_time  # Default is 6pm
@@ -2005,8 +2010,6 @@ class QGISrunOpenDSS(object):
                             if int(h) == 24:  # last round on 23:45
                                 h = '23'
                                 m = '45'
-                    if len(list(h)) < 2:
-                        h = '0' + h
                     snapshottime = h + ':' + m
                     
                     day_ = snapshotdate.replace('/', '')
@@ -2186,7 +2189,7 @@ class QGISrunOpenDSS(object):
                             DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[0]) # kW corrector
                         except TypeError: #error debido a que no se encontró la fecha
                             QMessageBox.critical(None, QCoreApplication.translate('dialog', "Error"), QCoreApplication.translate('dialog',
-                                                                           u'Debe introducir una fecha que coincida con alguna fecha en el .csv de la curva del alimentador.\nIgualmente puede dejar en blanco y se seleccionará el día más representativo'))
+                                                                           u'Debe introducir una fecha y hora que coincida con alguna fecha en el .csv de la curva del alimentador.\nIgualmente puede dejar en blanco y se seleccionará el día más representativo'))
                             return
                             
                         DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[0]) # kVAr corrector
@@ -2252,8 +2255,7 @@ class QGISrunOpenDSS(object):
                         # save results on shapes
                         if self.dlg.checkBox_capas.isChecked():
                             currentList.append(
-                                auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic,
-                                                     study))  # Normalized currents
+                                auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic, study))  # Normalized currents
                             # voltages shapes update
                             auxfcns.WriteBusVolts(self, busesDict, name_file_created, study)
     
@@ -2364,6 +2366,7 @@ class QGISrunOpenDSS(object):
                     
                     tinitial_daily = time.time()  # daily time start
                     dailydate = self.dlg.lineEdit_daily_date.text().upper()  # simulation date
+                    dailydate = correct_date( load_curve_circuit, dailydate )
                     self.dailydate = dailydate
                     if not dailydate:  # representative day selection routine
                         dailydate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
@@ -3180,10 +3183,12 @@ class QGISrunOpenDSS(object):
     
                     # simulation date
                     scdate = self.dlg.lineEdit_sc_date.text().upper()
+                    scdate = correct_date( load_curve_circuit, scdate )
                     if not scdate: # if empty: representative day selection
                         scdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
                     # simulation time
                     sctime = self.dlg.lineEdit_sc_time.text()  # .upper()
+                    sctime = correct_hour( load_curve_circuit, sctime )
                     if not sctime:
                         sctime = def_time  # Default is 6pm
     
@@ -3203,8 +3208,6 @@ class QGISrunOpenDSS(object):
                             if int(h) == 24:  # last rount stays on 23:45
                                 h = '23'
                                 m = '45'
-                    if len(list(h)) < 2:
-                        h = '0' + h
                     sctime = h + ':' + m
     
                     daily_strtime = str(scdate.replace('/', '') + sctime.replace(':', ''))
@@ -3344,7 +3347,7 @@ class QGISrunOpenDSS(object):
 
                         if DSScircuit == -1:
                             QMessageBox.critical(None, QCoreApplication.translate('dialog', "Error"), QCoreApplication.translate('dialog',
-                                                                                                       u'Debe introducir una fecha que coincida con alguna fecha en el .csv de la curva del alimentador.\nIgualmente puede dejar en blanco y se seleccionará el día más representativo'))
+                                                                                                       u'Debe introducir una fecha y hora que coincida con alguna fecha en el .csv de la curva del alimentador.\nIgualmente puede dejar en blanco y se seleccionará el día más representativo'))
                             return
                         DSSprogress.PctProgress = 50
                         # post load allocation simulation
@@ -3553,18 +3556,21 @@ class QGISrunOpenDSS(object):
                         selected_parameter = 0;
                         harm_parameter = type_parameters[selected_parameter]  # always use GMM
         
-                        # Date
-                        harmonicdate = self.dlg.lineEdit_harmonic_date.text().upper()
-                        if not harmonicdate:
-                            harmonicdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
-        
-                        harm_daily_date = str(harmonicdate.replace('/', ''))
+                        
                         ##################################
                         ##### HARMONIC SNAPSHOT ##########
                         ##################################
         
                         if self.dlg.snapshot.isChecked():
+							# Date
+                            harmonicdate = self.dlg.lineEdit_harmonic_date.text().upper()
+                            harmonicdate = correct_date( load_curve_circuit, harmonicdate )
+                            if not harmonicdate:
+                                harmonicdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
+                            harm_daily_date = str(harmonicdate.replace('/', ''))
+							
                             harmonictime = self.dlg.lineEdit_harmonic_time.text().upper()
+                            harmonictime = correct_hour( load_curve_circuit, harmonictime )
                             if not harmonictime:
                                 harmonictime = def_time  # default: 18:00
         
@@ -3588,6 +3594,14 @@ class QGISrunOpenDSS(object):
                         ##################################            
         
                         if self.dlg.daily.isChecked():
+							# Date
+                            harmonicdate = self.dlg.lineEdit_harmonic_date_daily.text().upper()
+                            harmonicdate = correct_date( load_curve_circuit, harmonicdate )
+                            if not harmonicdate:
+                                harmonicdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
+            
+                            harm_daily_date = str(harmonicdate.replace('/', ''))
+                            
                             H_Time = []  ## time array from 00:00:00 to 23:50:00, 10 minutes step
                             for h in range(24):
                                 for m in range(6):

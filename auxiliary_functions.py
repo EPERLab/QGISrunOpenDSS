@@ -563,6 +563,7 @@ def WriteBusVolts(self, busesDic, name_file_created, study):
         
         layerMV.commitChanges()
         layerLV.commitChanges()
+        return
     except IndexError:  # no layer encountered
         QgsMessageLog.logMessage('No existe capa de buses', QCoreApplication.translate('dialog', 'Alerta Buses'),
                                  QgsMessageLog.WARNING)

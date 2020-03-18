@@ -610,8 +610,14 @@
        <property name="layoutDirection">
         <enum>Qt::LeftToRight</enum>
        </property>
+       <property name="inputMethodHints">
+        <set>Qt::ImhDate|Qt::ImhDigitsOnly</set>
+       </property>
        <property name="text">
         <string/>
+       </property>
+       <property name="maxLength">
+        <number>10</number>
        </property>
        <property name="alignment">
         <set>Qt::AlignCenter</set>
