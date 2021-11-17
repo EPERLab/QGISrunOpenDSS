@@ -7,7 +7,7 @@
                               -------------------
         begin                : 2015-12-03
         git sha              : $Format:%H$
-        copyright            : (C) 2015 by EPERLab
+        copyright            : (C)2015 by EPERLab
         email                : eperlab.eie@ucr.ac.cr
  ***************************************************************************/
 
@@ -16,7 +16,7 @@
  *   This program is free software; you can redistribute it and/or modify  *
  *   it under the terms of the GNU General Public License as published by  *
  *   the Free Software Foundation; either version 2 of the License, or     *
- *   (at your option) any later version.                                   *
+ *   (at your option)any later version.                                   *
  *                                                                         *
  ***************************************************************************/
 """
@@ -67,11 +67,13 @@ import sys
 import copy
 import fileinput
 
-from .evs_code.create_study_EVS import CreateEVDss #Para estudio random, por consumo o por probabilidad de EV
-from .evs_code.EVsFunctions import CreateList_SOC_t, update_storage #Para crear lista de dssnames y t's
+from .create_study_EVS import CreateEVDss #Para estudio random, por consumo o por probabilidad de EV
+from .EVsFunctions import CreateList_SOC_t, update_storage #Para crear lista de dssnames y t's
+from .AEBsFunctions import uncomment_lines, comment_lines
 from .correct_date_time import correct_date, correct_hour #para corregir la fecha y tiempo
+import subprocess
 
-QApplication.setStyle(QStyleFactory.create('WindowsVista'))  # <- Choose the style
+QApplication.setStyle(QStyleFactory.create('WindowsVista')) # <- Choose the style
 
 # noinspection PyCallByClass
 class QGISrunOpenDSS(object):
@@ -86,21 +88,23 @@ class QGISrunOpenDSS(object):
             locale = (u'es')
 
         locale_path = os.path.join(self.plugin_dir, 'i18n',
-                                   'QGISrunOpenDSS_{}.qm'.format(locale))  # This line links to the translation file
+                                   'QGISrunOpenDSS_{}.qm'.format(locale)) # This line links to the translation file
 
         if os.path.exists(locale_path):
             self.translator = QTranslator()
             self.translator.load(locale_path)
 
-            if qVersion() > '4.3.3':
+            if qVersion()> '4.3.3':
                 QCoreApplication.installTranslator(self.translator)
 
-        # Create the dialog (after translation) and keep reference
+        # Create the dialog (after translation)and keep reference
         self.dlg = QGISrunOpenDSSDialog()
         self.transformer = Ui_Transformer()
         self.gui_ev = GUI_Ves()
         self.gui_gd = GUI_Gd()
-        
+        self.cargas = False
+        self.lv_lines = False
+        self.mv_lines = False
         self.dlg.buttonBox.helpRequested.connect(self.show_help)
         self.dlg.lineEdit_dirOutput.clear()
         self.dlg.lineEdit_dirOutput.setText('C:\Results_QGISPython')
@@ -110,12 +114,12 @@ class QGISrunOpenDSS(object):
 
         # Declare instance attributes
         self.actions = []
-        self.menu = self.tr(QCoreApplication.translate('dialog', u'&Correr estudio de red usando OpenDSS'))
+        self.menu = self.tr(u'&Correr estudio de red usando OpenDSS')
 
         self.toolbar = self.iface.addToolBar(
             QCoreApplication.translate('dialog', u'Correr estudio de red usando OpenDSS'))
         self.toolbar.setObjectName(QCoreApplication.translate('dialog', u'Correr estudio de red usando OpenDSS'))
-
+      
         self.dlg.pushButton_output_folder.clicked.connect(self.select_output_folder)
         self.dlg.pushButton_load_curve.clicked.connect(self.select_demand_curve)
         self.dlg.pushButton_transformer.clicked.connect(self.transformer_button)
@@ -125,15 +129,7 @@ class QGISrunOpenDSS(object):
         self.dlg.pushButton_TMT_spectrum.clicked.connect(self.select_TMT_spectrum)
         
 
-        # SC checkboxex
-        self.dlg.checkBox_SC_phaseA.toggled.connect(self.short_circuit_enabler)
-        self.dlg.checkBox_SC_phaseB.toggled.connect(self.short_circuit_enabler)
-        self.dlg.checkBox_SC_phaseC.toggled.connect(self.short_circuit_enabler)
-        self.short_circuit_enabler()
-        self.dlg.checkBox_SC_phaseLL.setEnabled(True)
-
         
-
         # harmonic enabler
         self.dlg.harmonics.toggled.connect(self.harmonics_enabler)
         self.dlg.checkBox_harm_res.toggled.connect(self.harmonics_enabler)
@@ -168,23 +164,39 @@ class QGISrunOpenDSS(object):
         
         
         #Flujo de potencia
-        self.dlg.powerflow_yearly.toggled.connect( self.change_check_yearly_powerflow )
-        self.dlg.powerflow_daily.toggled.connect( self.change_check_daily_powerflow )
-        self.dlg.powerflow_snapshot.toggled.connect( self.change_check_snapshot_powerflow )
+        self.dlg.powerflow_yearly.toggled.connect(self.change_check_yearly_powerflow)
+        self.dlg.powerflow_daily.toggled.connect(self.change_check_daily_powerflow)
+        self.dlg.powerflow_snapshot.toggled.connect(self.change_check_snapshot_powerflow)
         
         #Armónicos
-        self.dlg.harmonics.toggled.connect( self.change_check_harmonics )
-        self.dlg.daily.toggled.connect( self.change_check_daily_harmonics )
-        self.dlg.snapshot.toggled.connect( self.change_check_snapshot_harmonics )
+        self.dlg.harmonics.toggled.connect(self.change_check_harmonics)
+        self.dlg.daily.toggled.connect(self.change_check_daily_harmonics)
+        self.dlg.snapshot.toggled.connect(self.change_check_snapshot_harmonics)
         
         #Cortocircuito
-        self.dlg.short_circuit.toggled.connect( self.change_check_shortcircuit )
+        self.bandera_msg = False
+        self.short_circuit_enabler()
+        self.dlg.checkBox_SC_phaseLL.setEnabled(False)
+        self.dlg.checkBox_SC_phaseLL.setEnabled(False)
+        self.dlg.checkBox_SC_phaseA.setEnabled(False)
+        self.dlg.checkBox_SC_phaseB.setEnabled(False)
+        self.dlg.checkBox_SC_phaseC.setEnabled(False)
+        self.dlg.checkBox_SC_phaseA.setChecked(False)
+        self.dlg.checkBox_SC_phaseB.setChecked(False)
+        self.dlg.checkBox_SC_phaseC.setChecked(False)
+        
+        self.dlg.checkBox_SC_phaseA.toggled.connect(self.short_circuit_enabler)
+        self.dlg.checkBox_SC_phaseB.toggled.connect(self.short_circuit_enabler)
+        self.dlg.checkBox_SC_phaseC.toggled.connect(self.short_circuit_enabler)
+        self.dlg.short_circuit.toggled.connect(self.change_check_shortcircuit)
+        self.dlg.short_circuit.toggled.connect(self.enable_dict_nodes)
+        self.dlg.lineEdit_short_circuit.currentTextChanged.connect(self.change_nodes_short_circuit)#habilita checks para nodos de cortocircuito
         
         #Botones de EV y GD
         self.dlg.pushButton_EV.clicked.connect(self.EV_button)
         self.dlg.pushButton_dg.clicked.connect(self.GD_button)
-        self.dlg.EV.toggled.connect( self.evs_change_check )
-        self.dlg.PV.toggled.connect( self.pvs_change_check )
+        self.dlg.EV.toggled.connect(self.evs_change_check)
+        self.dlg.PV.toggled.connect(self.pvs_change_check)
         self.gd_button_push = False
         self.ev_button_push = False
         
@@ -208,21 +220,155 @@ class QGISrunOpenDSS(object):
             self.dlg.lineEdit_short_circuit.addItems(buses)
             pass
 
+    """
+    Función que se encarga de inicializar el diccionario de nodos de las fases cuando
+    el check de estudio de cortocircuito está habilitado.
+    """
+    def enable_dict_nodes(self):
+        if self.dlg.short_circuit.isChecked() is False:
+            return
+            
+        self.dict_buses_sc = {}
+        try:
+            layers_name = ["Bus_MT_Layer", "Bus_BT_Layer"]
+            for layer_name in layers_name:
+                layer = QgsProject.instance().mapLayersByName(layer_name)[0]
+                buses = layer.getFeatures() # Recibe las caracteristicas de la capa de lineas de baja tension.
+                for bus in buses:
+                    dss_bus = bus['BUS'] 
+                    nodes = str(bus['NODES'])
+                    self.dict_buses_sc[dss_bus] = nodes
+        except:
+            nombre_bus = self.dlg.lineEdit_short_circuit.currentText()
+            if  nombre_bus != "":
+                self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+                self.dlg.checkBox_SC_phaseA.setEnabled(True)
+                self.dlg.checkBox_SC_phaseB.setEnabled(True)
+                self.dlg.checkBox_SC_phaseC.setEnabled(True)
+                self.dlg.checkBox_SC_phaseA.setChecked(True)
+                self.dlg.checkBox_SC_phaseB.setChecked(True)
+                self.dlg.checkBox_SC_phaseC.setChecked(True)
+                
+            
+            if self.bandera_msg is False:
+                mensaje = "Verifique que exista la capa de Bus_MT_Layer y Bus_BT_Layer y que tenga el atributo 'NODES'."
+                mensaje +="\nPodrá correr la simulación, pero puede que seleccione nodos que no estén contenidos en la barra."
+                QMessageBox.information(None, QCoreApplication.translate('dialog', u"Error al buscar nodos de circuitos"),
+                                                QCoreApplication.translate('dialog',
+                                                                         mensaje))
+            self.bandera_msg = True
+        
+    
+    """
+    Función que se encarga de cambiar los checks de las fases de cortocircuito
+    según las fases que tenga la barra
+    """
+    def change_nodes_short_circuit(self):
+        nombre_bus = self.dlg.lineEdit_short_circuit.currentText()
+        if  nombre_bus == "":
+            self.dlg.checkBox_SC_phaseLL.setEnabled(False)
+            self.dlg.checkBox_SC_phaseA.setChecked(False)
+            self.dlg.checkBox_SC_phaseA.setEnabled(False)
+            self.dlg.checkBox_SC_phaseB.setChecked(False)
+            self.dlg.checkBox_SC_phaseB.setEnabled(False)
+            self.dlg.checkBox_SC_phaseC.setChecked(False)
+            self.dlg.checkBox_SC_phaseC.setEnabled(False)
+        
+        elif "BUSMV" in nombre_bus or "BUSLV" in nombre_bus:
+            try:
+                nodos = self.dict_buses_sc[nombre_bus]
+                #print("bus MV or LV ", nodos)
+                self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+                if nodos == "123":
+                    self.dlg.checkBox_SC_phaseA.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseB.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseC.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseA.setChecked(True)
+                    self.dlg.checkBox_SC_phaseB.setChecked(True)
+                    self.dlg.checkBox_SC_phaseC.setChecked(True)
+                elif nodos == "23" or nodos == "32":
+                    self.dlg.checkBox_SC_phaseA.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseA.setChecked(False)
+                    self.dlg.checkBox_SC_phaseB.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseB.setChecked(True)
+                    self.dlg.checkBox_SC_phaseC.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseC.setChecked(True)
+                elif nodos == "13" or nodos == "31":
+                    self.dlg.checkBox_SC_phaseA.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseA.setChecked(True)
+                    self.dlg.checkBox_SC_phaseB.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseB.setChecked(False)
+                    self.dlg.checkBox_SC_phaseC.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseC.setChecked(True)
+                elif nodos == "12" or nodos == "21":
+                    self.dlg.checkBox_SC_phaseA.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseA.setChecked(True)
+                    self.dlg.checkBox_SC_phaseB.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseB.setChecked(True)
+                    self.dlg.checkBox_SC_phaseC.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseC.setChecked(False)
+                elif nodos == "1":
+                    self.dlg.checkBox_SC_phaseA.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseA.setChecked(True)
+                    self.dlg.checkBox_SC_phaseB.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseB.setChecked(False)
+                    self.dlg.checkBox_SC_phaseC.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseC.setChecked(False)
+                elif nodos == "2":
+                    self.dlg.checkBox_SC_phaseA.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseA.setChecked(False)
+                    self.dlg.checkBox_SC_phaseB.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseB.setChecked(True)
+                    self.dlg.checkBox_SC_phaseC.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseC.setChecked(False)
+                elif nodos == "3":
+                    self.dlg.checkBox_SC_phaseA.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseA.setChecked(False)
+                    self.dlg.checkBox_SC_phaseB.setEnabled(False)
+                    self.dlg.checkBox_SC_phaseB.setChecked(False)
+                    self.dlg.checkBox_SC_phaseC.setEnabled(True)
+                    self.dlg.checkBox_SC_phaseC.setChecked(True)
+            except:
+                self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+                self.dlg.checkBox_SC_phaseA.setEnabled(True)
+                self.dlg.checkBox_SC_phaseB.setEnabled(True)
+                self.dlg.checkBox_SC_phaseC.setEnabled(True)
+                self.dlg.checkBox_SC_phaseA.setChecked(True)
+                self.dlg.checkBox_SC_phaseB.setChecked(True)
+                self.dlg.checkBox_SC_phaseC.setChecked(True)
+            
+        #Caso que sean todas las barras    
+        else:
+            self.dlg.checkBox_SC_phaseLL.setEnabled(True)
+            self.dlg.checkBox_SC_phaseA.setEnabled(True)
+            self.dlg.checkBox_SC_phaseB.setEnabled(True)
+            self.dlg.checkBox_SC_phaseC.setEnabled(True)
+            self.dlg.checkBox_SC_phaseA.setChecked(True)
+            self.dlg.checkBox_SC_phaseB.setChecked(True)
+            self.dlg.checkBox_SC_phaseC.setChecked(True)
+            
+        return  
+                
+            
+    
     # Enable/disable short circuit checkboxes
     def short_circuit_enabler(self):
-        if self.dlg.checkBox_SC_phaseA.isChecked() and self.dlg.checkBox_SC_phaseB.isChecked() and not self.dlg.checkBox_SC_phaseC.isChecked():
+        nombre_bus = self.dlg.lineEdit_short_circuit.currentText()
+        if  nombre_bus == "":
+            return
+        if self.dlg.checkBox_SC_phaseA.isChecked()and self.dlg.checkBox_SC_phaseB.isChecked()and not self.dlg.checkBox_SC_phaseC.isChecked():
             self.dlg.checkBox_SC_phaseLL.setEnabled(True)
-        if not self.dlg.checkBox_SC_phaseA.isChecked() and self.dlg.checkBox_SC_phaseB.isChecked() and self.dlg.checkBox_SC_phaseC.isChecked():
+        if not self.dlg.checkBox_SC_phaseA.isChecked()and self.dlg.checkBox_SC_phaseB.isChecked()and self.dlg.checkBox_SC_phaseC.isChecked():
             self.dlg.checkBox_SC_phaseLL.setEnabled(True)
-        if self.dlg.checkBox_SC_phaseA.isChecked() and not self.dlg.checkBox_SC_phaseB.isChecked() and self.dlg.checkBox_SC_phaseC.isChecked():
+        if self.dlg.checkBox_SC_phaseA.isChecked()and not self.dlg.checkBox_SC_phaseB.isChecked()and self.dlg.checkBox_SC_phaseC.isChecked():
             self.dlg.checkBox_SC_phaseLL.setEnabled(True)
-        if self.dlg.checkBox_SC_phaseA.isChecked() and self.dlg.checkBox_SC_phaseB.isChecked() and self.dlg.checkBox_SC_phaseC.isChecked():
+        if self.dlg.checkBox_SC_phaseA.isChecked()and self.dlg.checkBox_SC_phaseB.isChecked()and self.dlg.checkBox_SC_phaseC.isChecked():
             self.dlg.checkBox_SC_phaseLL.setEnabled(True)
-        if self.dlg.checkBox_SC_phaseA.isChecked() and not self.dlg.checkBox_SC_phaseB.isChecked() and not self.dlg.checkBox_SC_phaseC.isChecked():
+        if self.dlg.checkBox_SC_phaseA.isChecked()and not self.dlg.checkBox_SC_phaseB.isChecked()and not self.dlg.checkBox_SC_phaseC.isChecked():
             self.dlg.checkBox_SC_phaseLL.setEnabled(False)
-        if not self.dlg.checkBox_SC_phaseA.isChecked() and self.dlg.checkBox_SC_phaseB.isChecked() and not self.dlg.checkBox_SC_phaseC.isChecked():
+        if not self.dlg.checkBox_SC_phaseA.isChecked()and self.dlg.checkBox_SC_phaseB.isChecked()and not self.dlg.checkBox_SC_phaseC.isChecked():
             self.dlg.checkBox_SC_phaseLL.setEnabled(False)
-        if not self.dlg.checkBox_SC_phaseA.isChecked() and not self.dlg.checkBox_SC_phaseB.isChecked() and self.dlg.checkBox_SC_phaseC.isChecked():
+        if not self.dlg.checkBox_SC_phaseA.isChecked()and not self.dlg.checkBox_SC_phaseB.isChecked()and self.dlg.checkBox_SC_phaseC.isChecked():
             self.dlg.checkBox_SC_phaseLL.setEnabled(False)
 
     # Switch between kA and MVA for short circuit
@@ -240,7 +386,7 @@ class QGISrunOpenDSS(object):
 
     # Losses, unbalance and save to shapes checkboxes enabler
     def SLUenabler(self):
-        if self.dlg.powerflow_snapshot.isChecked() or self.dlg.powerflow_daily.isChecked() or self.dlg.short_circuit.isChecked():
+        if self.dlg.powerflow_snapshot.isChecked()or self.dlg.powerflow_daily.isChecked()or self.dlg.short_circuit.isChecked():
             self.dlg.checkBoxLosses.setEnabled(True)
             self.dlg.checkBoxUnbalance.setEnabled(True)
             self.dlg.checkBox_capas.setEnabled(True)
@@ -255,7 +401,7 @@ class QGISrunOpenDSS(object):
     
     #Abre la ventana de EVs cuando se habilita el check la primera vez
     def evs_change_check(self):
-        if self.ev_button_push == False and self.dlg.EV.isChecked():
+        if self.ev_button_push is False and self.dlg.EV.isChecked():
             self.gui_ev.dlg.show()
             self.result_ev = self.gui_ev.dlg.exec_()
             self.ev_button_push = True
@@ -263,7 +409,7 @@ class QGISrunOpenDSS(object):
             
     #Abre la ventana de PVs cuando se habilita el check la primera vez
     def pvs_change_check(self):
-        if self.gd_button_push == False and self.dlg.PV.isChecked():
+        if self.gd_button_push is False and self.dlg.PV.isChecked():
             self.gui_gd.dlg.show()
             self.result_gd = self.gui_gd.dlg.exec_()
             self.gd_button_push = True
@@ -336,7 +482,7 @@ class QGISrunOpenDSS(object):
             self.dlg.powerflow_daily.setChecked(False)
             self.dlg.powerflow_snapshot.setChecked(False)
             self.dlg.daily.setChecked(False)
-            self.dlg.snapshot.setChecked(True) #por defecto estará habilitado el análisis de armónicos instantáneo
+            self.dlg.snapshot.setChecked(True)#por defecto estará habilitado el análisis de armónicos instantáneo
             self.dlg.short_circuit.setChecked(False)
         return
         
@@ -388,11 +534,11 @@ class QGISrunOpenDSS(object):
         prjpath = QgsProject.instance().fileName()
         if not prjpath:
             return
-        print( "prjpath = ", prjpath )
+        print("prjpath = ", prjpath)
         dir_general, dir_general2 = prjpath.split('/GIS', 1)
         dir_network = dir_general + '/DSS'  # Folder where all network models are stored
         os.chdir(dir_network)
-        networks = dir_general.split('/')[-1]  # [d for d in os.listdir('.') if os.path.isdir(d)]
+        networks = dir_general.split('/')[-1]  # [d for d in os.listdir('.')if os.path.isdir(d)]
         self.dlg.lineEdit_circuit_name.setText(networks)
         # self.dlg.comboBox_circuit_name.addItems(networks)
 
@@ -400,7 +546,7 @@ class QGISrunOpenDSS(object):
     def select_output_folder(self):
         output_folder = QFileDialog.getExistingDirectory(self.dlg, QCoreApplication.translate('dialog',
                                                                                               "Seleccione carpeta de salida"),
-                                                         "", )
+                                                         "",)
         self.dlg.lineEdit_dirOutput.setText(output_folder)
 
     # Method to select the load curve of the circuit
@@ -408,7 +554,7 @@ class QGISrunOpenDSS(object):
         #load_curve_circuit, __, __ = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog', 'Seleccione el archivo .CSV para asignar curva de demanda de circuito'), "", "*.csv")
         load_curve_circuit = QFileDialog.getOpenFileName(self.dlg, QCoreApplication.translate('dialog', 'Seleccione el archivo .CSV para asignar curva de demanda de circuito'), "", "*.csv")
         load_curve_circuit = load_curve_circuit[0]
-        print( "load_curve_circuit = ", str( load_curve_circuit ) )
+        print("load_curve_circuit = ", str(load_curve_circuit))
         self.dlg.lineEdit_load_curve.setText(load_curve_circuit)
 
     def transformer_button(self):  # Method to call the main transformer configuration window
@@ -441,6 +587,7 @@ class QGISrunOpenDSS(object):
 
     # change the parameters according to the selected circuit
     def cktNameDefaults(self):
+        self.dlg.lineEdit_sourcevoltage.setText("1.0")
         prjpath = QgsProject.instance().fileName()
         if not prjpath:
             return
@@ -453,24 +600,52 @@ class QGISrunOpenDSS(object):
             file_check = file_check[-10:]
             file_name = re.sub('\.dss$', '', file).replace('_' + file_check, '')
             if file_check == 'Substation':
-                file_name_path = str(os.getcwd()) + '\\' + '\\' + file
-                fp = open(file_name_path)                
+                file_name_path = str(os.getcwd())+ '\\' + '\\' + file
+                fp = open(file_name_path)        
                 lines = fp.readlines()
-                line = lines[1]
-                line = line.split(' ')
+                line_ = lines[1]
+                line = line_.split(' ')
                 self.dlg.lineEdit_frequency.clear()
                 self.dlg.lineEdit_frequency.setText('60')
 
                 self.dlg.lineEdit_phase.clear()
                 self.dlg.lineEdit_phase.setText('0')
-
-                #self.dlg.lineEdit_3pShortCircuitPower.clear()
-                if self.dlg.lineEdit_3pShortCircuitPower.text() == '':
-                    self.dlg.lineEdit_3pShortCircuitPower.setText('10')
+                
+                # Corriente de corto circuit subestación
+                
+                # Monofásica
+                str_search = "isc1p="
+                in_isc1 = line_.find(str_search)
+                if in_isc1 != -1:
+                    in_isc1 = line_.find("isc1p=")
+                    in_isc1 += len(str_search) 
+                    fin_isc1 = line_.find(" ", in_isc1)
+                    isc1p = line_[in_isc1:fin_isc1]
+                else:
+                    isc1p = ""
+                # Trifásica
+                str_search = "isc3p="
+                in_isc3 = line_.find(str_search)
+                if in_isc3 != -1:
+                    in_isc3 = line_.find("isc3p=")
+                    in_isc3 += len(str_search)
+                    fin_isc3 = line_.find(" ", in_isc3)
+                    isc3p = line_[in_isc3:fin_isc3]
+                else:
+                    isc3p = ""
+                if self.dlg.lineEdit_3pShortCircuitPower.text()== '':
+                    if isc3p == "":
+                        self.dlg.lineEdit_3pShortCircuitPower.setText('10')
+                    else:
+                        self.dlg.lineEdit_3pShortCircuitPower.setText(isc3p)
 
                 #self.dlg.lineEdit_1pShortCircuitPower.clear()
-                if self.dlg.lineEdit_1pShortCircuitPower.text() == '':
-                    self.dlg.lineEdit_1pShortCircuitPower.setText('10.5')
+                if self.dlg.lineEdit_1pShortCircuitPower.text()== '':
+                    if isc1p == "":
+                        self.dlg.lineEdit_1pShortCircuitPower.setText('10.5')
+                    else:
+                        self.dlg.lineEdit_1pShortCircuitPower.setText(isc1p)
+                    
                 if "UNIT" in lines[0]: # substation is single unit
                     self.transformer.checkBox_tertiary.setCheckState(0)
                     for ij in range(len(line)):
@@ -593,7 +768,7 @@ class QGISrunOpenDSS(object):
                                 self.transformer.comboBox_tap_location.setCurrentIndex(0)
                             else:
                                 self.transformer.comboBox_tap_location.setCurrentIndex(1)
-                    self.dlg.transformer_modelling.setTitle(QCoreApplication.translate('dialog',
+                    self.dlg.transformer_modelling.setTirtle(QCoreApplication.translate('dialog',
                                                                                        u'Transformador principal'))
                     self.dlg.transformer_modelling.setEnabled(True)
                 elif "NOMODEL" in lines[0]: # substation empty model
@@ -613,21 +788,22 @@ class QGISrunOpenDSS(object):
                     line_check = line.split(" ")
                     for ij in range(len(line_check)):
                         if 'kVs=[' in line_check[ij]:
-                            def_V_prim = float(line_check[ij].replace('kVs=[', ''))*np.sqrt(3) # from kVs line to neutral to kVs line to line
+                            def_V_prim = float(line_check[ij].replace('kVs=[', ''))*np.sqrt(3)# from kVs line to neutral to kVs line to line
                             self.dlg.lineEdit_voltage.clear()
                             self.dlg.lineEdit_voltage.setText(str(def_V_prim))
                     self.dlg.lineEdit_name_busbar.clear()
-                    self.dlg.lineEdit_name_busbar.setText('BUSMV' + file_name + '1') # first bus
+                    self.dlg.lineEdit_name_busbar.setText('BUSMV' + file_name + '1')# first bus
                     self.dlg.transformer_modelling.setTitle(QCoreApplication.translate('dialog',
                                                                                        u'Autotransformador en subestación'))
                 fp.close()
+                break
             else:
                 pass  # no substation   
     
     # method to extract first MV line name
     def firstLine(self):
         # line = self.dlg.lineEdit_name_busbar.text()
-        mainBus = self.dlg.lineEdit_name_busbar.text() + "."
+        mainBus = self.dlg.lineEdit_name_busbar.text()+ "."
         prjpath = QgsProject.instance().fileName()
         if not prjpath:
             return
@@ -642,10 +818,9 @@ class QGISrunOpenDSS(object):
             file_check = re.sub('\.dss$', '', file)
             file_check = file_check[-7:]
             if file_check == 'LinesMV':
-                print( "file_check = 'LinesMV'")
-                print( "mainBus = ", str(mainBus) )
+                print("mainBus = ", str(mainBus))
 
-                file_name_path = str(os.getcwd()) + '\\' + '\\' + file
+                file_name_path = str(os.getcwd())+ '\\' + '\\' + file
                 
                 fp = open(file_name_path)
                 lines = fp.readlines()
@@ -659,12 +834,13 @@ class QGISrunOpenDSS(object):
                 if line == '':
                     QMessageBox.information(None, QCoreApplication.translate('dialog', u"Error al encontrar primera línea"),
                                             QCoreApplication.translate('dialog',
-                                                                     u"Verificar conexión de subestación"))        
+                                                                     u"Verificar conexión de subestación"))
+                break
         return line
 
     def tr(self, message):
         # noinspection PyTypeChecker,PyArgumentList,PyCallByClass
-        return QCoreApplication.translate('Correr estudio de red usando OpenDSS', message)
+        return QCoreApplication.translate('dialog', 'Correr estudio de red usando OpenDSS', message)
 
     def add_action(self, icon_path, text, callback, enabled_flag=True, add_to_menu=True,
                    add_to_toolbar=True, status_tip=None, whats_this=None, parent=None):
@@ -683,27 +859,32 @@ class QGISrunOpenDSS(object):
         self.actions.append(action)
         return action
         
-    #Función que se encarga de imprimir los errores que han ocurrido
+    # Función que se encarga de imprimir los errores que han ocurrido
     def print_error(self):
         exc_info = sys.exc_info()
-        print("\nError: ", exc_info )
-        print("*************************  Información detallada del error ********************")
+        msg = str(exc_info)
+        msg += "\nError: " + str(exc_info)
+        msg += "\n********  Información detallada del error **********"  
         for tb in traceback.format_tb(sys.exc_info()[2]):
-            print(tb)
+            msg += "\n" + tb
+
+        print(msg)
+        return msg
+        
 
     def initGui(self):
         """Create the menu entries and toolbar icons inside the QGIS GUI."""
         icon_path = ':/plugins/QGISrunOpenDSS/icon.png'
         self.add_action(icon_path,
-                        text=self.tr(u'Correr estudio de red usando OpenDSS'),
-                        callback=self.run, 
-                        parent=self.iface.mainWindow())
+                        text=self.tr(QCoreApplication.translate('dialog', u'Correr estudio de red usando OpenDSS')),
+                        callback=self.run, parent=self.iface.mainWindow())
+
     
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
             self.iface.removePluginMenu(
-                self.tr(u'Correr estudio de red usando OpenDSS'), action)
+                self.tr(u'&Correr estudio de red usando OpenDSS'), action)
             self.iface.removeToolBarIcon(action)
         del self.toolbar  # remove the toolbar
         
@@ -725,72 +906,59 @@ class QGISrunOpenDSS(object):
     """
     Función que se encarga de instalar una librería en la versión de python de QGIS
     -Parámetros de entrada:
-    *librarie_name (string): nombre de la librería a instalar (tal como se le debe pasar a pip)
+    *library_name (string): nombre de la librería a instalar (tal como se le debe pasar a pip)
     
     -Valores retornados:
     *1 en caso de finalizar exitosamente
     *0 en caso de ocurrir algún error
     """
     
-    def install_libraries(self, librarie_name):
+    def install_libraries(self, library_name):
         try:
-            import subprocess
-            from pathlib import Path
-            #Se obtiene el path de QGIS
-            directorio = str( os.path )
+            # Se obtiene el path de QGIS
+            directorio = str(os.path)
             fin_dir = directorio.find("\\apps")
-            inic_dir = directorio.find("C:\\")
-            path = directorio[ inic_dir : fin_dir - 1]
-            #Se obtiene version de Python en QGIS
+            first_letter_in = directorio.find(":\\") - 1
+            first_letter = directorio[first_letter_in:first_letter_in+1]
+            first_letter += ":\\"
+            inic_dir = directorio.find(first_letter)
+            path = directorio[inic_dir:fin_dir]
+            # Se obtiene version de Python en QGIS
             info = sys.version_info
-            verspy1 = str( info[0] )
-            verspy2 = str( info[1] )
-            carp_python = str( verspy1 + verspy2 )
-            carp_python = str( "Python" + carp_python )
-            
-            #Se copia los archivos
-            dir_origen = path + "\\bin\\"
+            verspy1 = str(info[0])
+            verspy2 = str(info[1])
+            carp_python = verspy1 + verspy2
+            carp_python = "Python" + carp_python
+            # Se copia los archivos
+            dir_origen = path + "/bin/"
             name_file_or = "python" + verspy1 + ".dll"
-            archivo_origen = str( dir_origen + name_file_or )
-            dir_destino = str( path + "\\apps\\" + carp_python)        
-            name_dest = dir_destino +  name_file_or
-            
-            my_file = Path( name_dest )
-            print("name_dest = ", my_file.exists() )
-            if my_file.exists() == False:            
-                #Copia python3.dll
-                self.copy( archivo_origen, dir_destino )        
-            
-            #Copia python37.dll
+            archivo_origen = str(dir_origen + name_file_or)
+            dir_destino = path + "/apps/" + carp_python
+            name_dest = dir_destino + "/" + name_file_or
+            if os.path.exists(name_dest) is False:
+                # Copia python3.dll
+                self.copy(archivo_origen, dir_destino)
+            # Copia python37.dll
             name_file_or = "python" + verspy1 + verspy2 + ".dll"
             archivo_origen = dir_origen + name_file_or
-            name_dest = dir_destino +  name_file_or
-            
-            my_file = Path( name_dest )
-            print("name_dest = ", my_file.exists() )
-            
-            if my_file.exists() == False:            
-                #Copia python37.dll
-                self.copy( archivo_origen, dir_destino )
-            
-            #Instalación de librerías
-            
-            #Actualización de pip
-            subprocess.call('python.exe -m pip install –upgrade pip', cwd = dir_destino, shell = True )
-            
-            #Instalación libreria
-            sentencia = str( "python.exe -m pip install " + librarie_name )
-            subprocess.call(sentencia, cwd = dir_destino, shell = True )
-            
-            print("Instalación de librería ", librarie_name, " finalizada.")
+            name_dest = dir_destino + "/" + name_file_or
+            if os.path.exists(name_dest) is False:
+                # Copia python37.dll
+                self.copy(archivo_origen, dir_destino)
+            # Instalación de librerías
+            # Actualización de pip
+            sentencia = dir_origen + 'python.exe -m pip install –upgrade pip'
+            subprocess.call(sentencia, cwd=dir_destino, shell=True)
+            # Instalación libreria
+            sentencia = dir_origen + "python.exe -m pip install " + library_name
+            x = subprocess.call(sentencia, cwd=dir_destino, shell=True)
+            print("Instalación de librería ", library_name, " finalizada.")
             return 1
-        
-        except:
+        except Exception:
             self.print_error()
             return 0
-        
-        
-        
+
+
     """
     Función encargada de graficar las tensiones en una simulación instantánea. Se utiliza la librería de matplotlib.
     Grafica la tensión de las barras en función de la distancia entre estas y la subestación, y las separa en baja tensión,
@@ -819,7 +987,7 @@ class QGISrunOpenDSS(object):
             lv_nodes_C = []
             
             for node in nodes:
-                if "mv" in str(node).lower() or "source" in str(node).lower():
+                if "mv" in str(node).lower()or "source" in str(node).lower():
                     if str(node)[-1] == '1':
                         mv_nodes_A.append(node)
                     elif str(node)[-1] == '2':
@@ -835,13 +1003,13 @@ class QGISrunOpenDSS(object):
                     elif str(node)[-1] == '3':
                         lv_nodes_C.append(node)
                 
-            V_mv_A = pandas.DataFrame(index = mv_nodes_A, columns = ['voltage', 'distance'])
-            V_mv_B = pandas.DataFrame(index = mv_nodes_B, columns = ['voltage', 'distance'])
-            V_mv_C = pandas.DataFrame(index = mv_nodes_C, columns = ['voltage', 'distance'])
+            V_mv_A = pandas.DataFrame(index=mv_nodes_A, columns = ['voltage', 'distance'])
+            V_mv_B = pandas.DataFrame(index=mv_nodes_B, columns = ['voltage', 'distance'])
+            V_mv_C = pandas.DataFrame(index=mv_nodes_C, columns = ['voltage', 'distance'])
             
-            V_lv_A = pandas.DataFrame(index = lv_nodes_A, columns = ['voltage', 'distance'])
-            V_lv_B = pandas.DataFrame(index = lv_nodes_B, columns = ['voltage', 'distance'])
-            V_lv_C = pandas.DataFrame(index = lv_nodes_C, columns = ['voltage', 'distance'])
+            V_lv_A = pandas.DataFrame(index=lv_nodes_A, columns = ['voltage', 'distance'])
+            V_lv_B = pandas.DataFrame(index=lv_nodes_B, columns = ['voltage', 'distance'])
+            V_lv_C = pandas.DataFrame(index=lv_nodes_C, columns = ['voltage', 'distance'])
             
             #Asignar valores
             for node in list(dataframe_voltages.index):
@@ -868,31 +1036,31 @@ class QGISrunOpenDSS(object):
             
             leyenda = []
             fign = plt.figure("Tensiones pu con respecto a la distancia de la subestación")
-            if V_mv_A.empty == False:	
+            if V_mv_A.empty is False:	
                 plt.plot(V_mv_A['distance'], V_mv_A['voltage'], 'ro', markersize = 3.5)
                 leyenda.append("MV fase A")
-            if V_mv_B.empty == False:
+            if V_mv_B.empty is False:
                 plt.plot(V_mv_B['distance'], V_mv_B['voltage'], 'ko', markersize = 3.5)
                 leyenda.append("MV fase B")
-            if V_mv_C.empty == False:
+            if V_mv_C.empty is False:
                 plt.plot(V_mv_C['distance'], V_mv_C['voltage'], 'bo', markersize = 3.5)
                 leyenda.append("MV fase C")
-            if V_lv_A.empty == False:
+            if V_lv_A.empty is False:
                 plt.plot(V_lv_A['distance'], V_lv_A['voltage'], 'r.', markersize = 2.5)
                 leyenda.append("LV fase A (vivo 1)")
-            if V_lv_B.empty == False:
+            if V_lv_B.empty is False:
                 plt.plot(V_lv_B['distance'], V_lv_B['voltage'], 'k.', markersize = 2.5)
                 leyenda.append("LV fase B (vivo 2)")
-            if V_lv_C.empty == False:
-                plt.plot( V_lv_C['distance'], V_lv_C['voltage'], 'b.', markersize = 2.5)
+            if V_lv_C.empty is False:
+                plt.plot(V_lv_C['distance'], V_lv_C['voltage'], 'b.', markersize = 2.5)
                 leyenda.append("LV fase C")
             
-            #dia = self.dlg.lineEdit_snapshot_date.text() # read sim hour
+            #dia = self.dlg.lineEdit_snapshot_date.text()# read sim hour
             dia = self.snapshotdate
-            hora = self.dlg.lineEdit_snapshot_time.text() # read sim hour
-            titulo_graph = str( "Tensión pu por bus. Día: " + dia + ". Hora: "+ hora + ".")
+            hora = self.dlg.lineEdit_snapshot_time.text()# read sim hour
+            titulo_graph = "Tensión pu por bus. Día: " + dia + ". Hora: "+ hora + "."
             
-            tiempo_sim = str( dia + "_" + hora )
+            tiempo_sim = str(dia + "_" + hora)
             tiempo_sim = tiempo_sim.replace("/", "_")
             tiempo_sim = tiempo_sim.replace(" ", "_")
             tiempo_sim = tiempo_sim.replace(":", "_")
@@ -901,21 +1069,21 @@ class QGISrunOpenDSS(object):
             plt.ylabel("Tensión (pu)")
             plt.xlabel("Distancia (km)")
             
-            plt.title( titulo_graph )
+            plt.title(titulo_graph)
             mng = plt.get_current_fig_manager()
             mng.window.showMaximized()
             
             
-            output_file = str( self.output_folder + "\\Snapshot\\Snapshot_Voltage_" + tiempo_sim + ".csv" )
-            dataframe_voltages.to_csv( output_file)
-            output_file = str( self.output_folder + "\\Snapshot\\Snapshot_Voltages_"+ tiempo_sim + '.pdf' )
+            output_file = self.output_folder + "\\Snapshot\\Snapshot_Voltage_" + tiempo_sim + ".csv"
+            dataframe_voltages.to_csv(output_file)
+            output_file = self.output_folder + "\\Snapshot\\Snapshot_Voltages_"+ tiempo_sim + '.pdf'
             plt.savefig(output_file, format='pdf', dpi=6000)
             
             print("Graficación de tensiones exitosa")
             return 1
         except:
             exc_info = sys.exc_info()
-            print("\nError: ", exc_info )
+            print("\nError: ", exc_info)
             print("*************************  Información detallada del error ********************")
             
             for tb in traceback.format_tb(sys.exc_info()[2]):
@@ -942,8 +1110,8 @@ class QGISrunOpenDSS(object):
             from .Dataframe_Operations import plot_dataframe
             
             #Primero, modificar los dataframes para que devuelvan los valores promedio y por fase
-            nodes = list(DSScircuit.AllNodeNames) #PARA RETORNAR VALORES DE FASE
-            buses = list(DSScircuit.AllBusNames) # PARA RETORNAR VALORES PROMEDIO
+            nodes = list(DSScircuit.AllNodeNames)#PARA RETORNAR VALORES DE FASE
+            buses = list(DSScircuit.AllBusNames)# PARA RETORNAR VALORES PROMEDIO
             
             mv_nodes_A = []
             mv_nodes_B = []
@@ -957,7 +1125,7 @@ class QGISrunOpenDSS(object):
             lv_buses = []
             
             for node in nodes:
-                if "mv" in str(node).lower() or "source" in str(node).lower():
+                if "mv" in str(node).lower()or "source" in str(node).lower():
                     if str(node)[-1] == '1':
                         mv_nodes_A.append(node)
                     elif str(node)[-1] == '2':
@@ -973,25 +1141,25 @@ class QGISrunOpenDSS(object):
                         lv_nodes_C.append(node)
             
             for bus in buses:
-                if "mv" in str(bus).lower() or "source" in str(bus).lower():
+                if "mv" in str(bus).lower()or "source" in str(bus).lower():
                     mv_buses.append(bus)
                 elif "lv" in str(bus).lower():
                     lv_buses.append(bus)
             # Ya se tienen las listas 
             
             #Creación de dataframes
-            columnas = [ x for x in range(0,96)]
+            columnas = [x for x in range(0,96)]
             #Media tensión
-            V_mv_prom = pandas.DataFrame(index = mv_buses, columns = columnas)
-            V_mv_A = pandas.DataFrame(index = mv_nodes_A, columns = columnas)
-            V_mv_B = pandas.DataFrame(index = mv_nodes_B, columns = columnas)
-            V_mv_C = pandas.DataFrame(index = mv_nodes_C, columns = columnas)
+            V_mv_prom = pandas.DataFrame(index=mv_buses, columns = columnas)
+            V_mv_A = pandas.DataFrame(index=mv_nodes_A, columns = columnas)
+            V_mv_B = pandas.DataFrame(index=mv_nodes_B, columns = columnas)
+            V_mv_C = pandas.DataFrame(index=mv_nodes_C, columns = columnas)
             
             #Baja tensión
-            V_lv_prom = pandas.DataFrame(index = lv_buses, columns = columnas)
-            V_lv_A = pandas.DataFrame(index = lv_nodes_A, columns = columnas)
-            V_lv_B = pandas.DataFrame(index = lv_nodes_B, columns = columnas)
-            V_lv_C = pandas.DataFrame(index = lv_nodes_C, columns = columnas)
+            V_lv_prom = pandas.DataFrame(index=lv_buses, columns = columnas)
+            V_lv_A = pandas.DataFrame(index=lv_nodes_A, columns = columnas)
+            V_lv_B = pandas.DataFrame(index=lv_nodes_B, columns = columnas)
+            V_lv_C = pandas.DataFrame(index=lv_nodes_C, columns = columnas)
             
             #Asignación de valores con respecto a V_buses
             for node in list(dataframe_voltages.index):
@@ -1024,7 +1192,7 @@ class QGISrunOpenDSS(object):
                     temp_list = []
                     
                     for num in range(1,4):
-                        if mv_buses[bus]+'.'+str(num) in set_mv:
+                        if mv_buses[bus]+'.'+str(num)in set_mv:
                             temp_list.append(mv_buses[bus]+'.'+str(num))
                             set_mv.remove(mv_buses[bus]+'.'+str(num))
                  
@@ -1041,7 +1209,7 @@ class QGISrunOpenDSS(object):
                     temp_list = []
                     
                     for num in range(1,4):
-                        if lv_buses[bus]+'.'+str(num) in set_lv:
+                        if lv_buses[bus]+'.'+str(num)in set_lv:
                             temp_list.append(lv_buses[bus]+'.'+str(num))
                             set_lv.remove(lv_buses[bus]+'.'+str(num))
                     
@@ -1049,7 +1217,7 @@ class QGISrunOpenDSS(object):
                     V_lv_prom.loc[lv_buses[bus]] = pandas.DataFrame(dataframe_voltages.loc[temp_list].mean(axis=0)).T.values
             
             #Vector de tiempo
-            n_iteraciones = len( dataframe_voltages.columns )
+            n_iteraciones = len(dataframe_voltages.columns)
             time = []
             
             min_dia = 60*24
@@ -1057,20 +1225,20 @@ class QGISrunOpenDSS(object):
             
             tiemp = 0
             
-            for i in range( n_iteraciones ):                
-                tiemp_d = datetime.timedelta( minutes = tiemp )
+            for i in range(n_iteraciones):                
+                tiemp_d = datetime.timedelta(minutes = tiemp)
                 sec_temp = str(tiemp_d.seconds)
-                hours = int( int(sec_temp) /3600 )
-                minutes = int( int(sec_temp)/60 - hours*60 )
+                hours = int(int(sec_temp)/3600)
+                minutes = int(int(sec_temp)/60 - hours*60)
                 
                 if hours <= 10:
                     hours = "0" + str(hours)
                 if minutes <= 10:
                     minutes = "0" + str(minutes)
-                hours = str( hours )
-                minutes = str( minutes )
-                tiemp_add = str( hours + ":" + minutes )
-                time.append( tiemp_add )
+                hours = str(hours)
+                minutes = str(minutes)
+                tiemp_add = str(hours + ":" + minutes)
+                time.append(tiemp_add)
                 tiemp = tiemp + delta_min
             
             
@@ -1099,76 +1267,84 @@ class QGISrunOpenDSS(object):
             
             
             #Media tensión
-            if  self.dlg.checkBox_faseA_mv.isChecked() and V_mv_A.empty == False:
+            if  self.dlg.checkBox_faseA_mv.isChecked()and V_mv_A.empty is False:
                 titulo_ventana = "Tensión en barras MV fase A"
-                titulo_grafica = str("Tensión pu MV fase A por bus. Fecha: " + fecha)                   
-                output_file = str( self.output_folder + "\\Daily\\Daily_Voltages_MVphaseA_"+ fecha_sim + '.pdf' )
-                plot_dataframe( V_mv_A, titulo_grafica, titulo_ventana = titulo_ventana, x_label = xlabel, y_label = ylabel, output_file = output_file, save_csv = True )
+                titulo_grafica = "Tensión pu MV fase A por bus. Fecha: " + fecha
+                output_file = self.output_folder + "\\Daily\\Daily_Voltages_MVphaseA_"+ fecha_sim + '.pdf'
+                plot_dataframe(V_mv_A, titulo_grafica, titulo_ventana=titulo_ventana,
+                               x_label=xlabel, y_label=ylabel, output_file = output_file, save_csv = True)
                 
-            if  self.dlg.checkBox_faseB_mv.isChecked() and V_mv_B.empty == False:
-                titulo_ventana = ("Tensión en barras MV fase B")
-                titulo_grafica = str( "Tensión pu MV fase B por bus. Fecha: " + fecha)
-                output_file = str( self.output_folder + "\\Daily\\Daily_Voltages_MVphaseB_"+ fecha_sim + '.pdf' )
+            if  self.dlg.checkBox_faseB_mv.isChecked()and V_mv_B.empty is False:
+                titulo_ventana = "Tensión en barras MV fase B"
+                titulo_grafica = "Tensión pu MV fase B por bus. Fecha: " + fecha
+                output_file = self.output_folder + "\\Daily\\Daily_Voltages_MVphaseB_"+ fecha_sim + '.pdf'
                 #Se grafica el dataframe
-                plot_dataframe( V_mv_B, titulo_grafica, titulo_ventana = titulo_ventana, x_label = xlabel, y_label = ylabel, output_file = output_file, save_csv = True )
-                
-                
-            if  self.dlg.checkBox_faseC_mv.isChecked() and V_mv_C.empty == False:
+                plot_dataframe(V_mv_B, titulo_grafica, titulo_ventana=titulo_ventana,
+                               x_label=xlabel, y_label=ylabel, output_file = output_file, save_csv = True)
+
+            if  self.dlg.checkBox_faseC_mv.isChecked()and V_mv_C.empty is False:
                 titulo_ventana = "Tensión en barras MV fase C"
-                titulo_grafica = str("Tensión pu MV fase C por bus. Fecha: " + fecha)
-                output_file = str( self.output_folder + "\\Daily\\Daily_Voltages_MVphaseC_"+ fecha_sim + '.pdf' )
+                titulo_grafica = "Tensión pu MV fase C por bus. Fecha: " + fecha
+                output_file = self.output_folder + "\\Daily\\Daily_Voltages_MVphaseC_"+ fecha_sim + '.pdf'
                 #Se grafica el dataframe
-                plot_dataframe( V_mv_C, titulo_grafica, titulo_ventana = titulo_ventana, x_label = xlabel, y_label = ylabel, output_file = output_file, save_csv = True )
-                
-                
-            if  self.dlg.checkBox_prom_mv.isChecked() and V_mv_prom.empty == False:
+                plot_dataframe(V_mv_C, titulo_grafica, titulo_ventana=titulo_ventana,
+                               x_label=xlabel, y_label=ylabel, output_file = output_file, save_csv = True)
+
+            if  self.dlg.checkBox_prom_mv.isChecked()and V_mv_prom.empty is False:
                 titulo_ventana = "Tensiones en barras MV"
-                titulo_grafica = str("Tensión pu promedio MV por bus. Fecha: " + fecha)      
-                output_file = str( self.output_folder + "\\Daily\\Daily_Voltages_MVprom_"+ fecha_sim + '.pdf' )
+                titulo_grafica = "Tensión pu promedio MV por bus. Fecha: " + fecha
+                output_file = self.output_folder + "\\Daily\\Daily_Voltages_MVprom_"+ fecha_sim + '.pdf'
                 #Se grafica el dataframe
-                plot_dataframe( V_mv_prom, titulo_grafica, titulo_ventana = titulo_ventana, x_label = xlabel, y_label = ylabel, output_file = output_file, save_csv = True )
+                plot_dataframe(V_mv_prom, titulo_grafica, titulo_ventana=titulo_ventana,
+                               x_label=xlabel, y_label=ylabel, output_file = output_file, save_csv = True)
             
             #Baja tensión
-            if  self.dlg.checkBox_faseA_lv.isChecked() and V_mv_A.empty == False:
+            if  self.dlg.checkBox_faseA_lv.isChecked()and V_mv_A.empty is False:
                 titulo_ventana = "Tensión en barras LV fase A"
-                titulo_grafica = str("Tensión pu LV fase A (vivo 1) por bus. Fecha: " + fecha) 
-                output_file = str( self.output_folder + "\\Daily\\Daily_Voltages_LVphaseA_"+ fecha_sim + '.pdf' )
+                titulo_grafica = "Tensión pu LV fase A (vivo 1)por bus. Fecha: " + fecha
+                output_file = self.output_folder + "\\Daily\\Daily_Voltages_LVphaseA_"+ fecha_sim + '.pdf'
                 #Se grafica el dataframe
-                plot_dataframe( V_lv_A, titulo_grafica, titulo_ventana = titulo_ventana, x_label = xlabel, y_label = ylabel, output_file = output_file, save_csv = True )
+                plot_dataframe(V_lv_A, titulo_grafica, titulo_ventana=titulo_ventana,
+                               x_label=xlabel, y_label=ylabel, output_file = output_file, save_csv = True)
                 
                 
-            if  self.dlg.checkBox_faseB_lv.isChecked() and V_mv_B.empty == False:
+            if  self.dlg.checkBox_faseB_lv.isChecked()and V_mv_B.empty is False:
                 titulo_ventana = "Tensión en barras LV fase B (vivo 2)"
-                titulo_grafica = str( "Tensión pu LV fase B (vivo 2) por bus. Fecha: " + fecha)
-                output_file = str( self.output_folder + "\\Daily\\Daily_Voltages_LVphaseB_"+ fecha_sim + '.pdf' )
+                titulo_grafica = "Tensión pu LV fase B (vivo 2)por bus. Fecha: " + fecha
+                output_file = self.output_folder + "\\Daily\\Daily_Voltages_LVphaseB_"+ fecha_sim + '.pdf'
                 #Se grafica el dataframe
-                plot_dataframe( V_lv_B, titulo_grafica, titulo_ventana = titulo_ventana, x_label = xlabel, y_label = ylabel, output_file = output_file, save_csv = True )
+                plot_dataframe(V_lv_B, titulo_grafica, titulo_ventana=titulo_ventana,
+                               x_label=xlabel, y_label=ylabel, output_file = output_file, save_csv = True)
                 
-            if  self.dlg.checkBox_faseC_lv.isChecked() and V_lv_C.empty == False:
+            if  self.dlg.checkBox_faseC_lv.isChecked()and V_lv_C.empty is False:
                 titulo_ventana = "Tensión en barras LV fase 3"
-                titulo_grafica =  str("Tensión pu LV fase 3 por bus. Fecha: " + fecha)         
-                output_file = str( self.output_folder + "\\Daily\\Daily_Voltages_LVphase3_"+ fecha_sim + '.pdf' )
+                titulo_grafica =  "Tensión pu LV fase 3 por bus. Fecha: " + fecha
+                output_file = self.output_folder + "\\Daily\\Daily_Voltages_LVphase3_"+ fecha_sim + '.pdf'
                 #Se grafica el dataframe
-                plot_dataframe( V_lv_C, titulo_grafica, titulo_ventana = titulo_ventana, x_label = xlabel, y_label = ylabel, output_file = output_file, save_csv = True )
+                plot_dataframe(V_lv_C, titulo_grafica, titulo_ventana=titulo_ventana,
+                               x_label=xlabel, y_label=ylabel, output_file = output_file, save_csv = True)
             
-            if  self.dlg.checkBox_prom_lv.isChecked() and V_lv_prom.empty == False: 
+            if  self.dlg.checkBox_prom_lv.isChecked()and V_lv_prom.empty is False: 
                 titulo_ventana = "Tensiones promedio en barras LV"
-                titulo_grafica =  str("Tensión pu promedio LV por bus. Fecha: " + fecha)          
-                output_file = str( self.output_folder + "\\Daily\\Daily_Voltages_LVprom_"+ fecha_sim + '.pdf' )
+                titulo_grafica =  "Tensión pu promedio LV por bus. Fecha: " + fecha
+                output_file = self.output_folder + "\\Daily\\Daily_Voltages_LVprom_"+ fecha_sim + '.pdf'
                 #Se grafica el dataframe
-                plot_dataframe( V_lv_prom, titulo_grafica, titulo_ventana = titulo_ventana, x_label = xlabel, y_label = ylabel, output_file = output_file, save_csv = True )
+                plot_dataframe(V_lv_prom, titulo_grafica, titulo_ventana=titulo_ventana,
+                               x_label=xlabel, y_label=ylabel, output_file = output_file, save_csv = True)
                 
             
-            output_file = str( self.output_folder + "\\Daily\\Daily_VoltagesTot_" + fecha_sim + ".csv" )
-            dataframe_voltages.to_csv( output_file )
-            print("Graficación de tensiones exitosa")
-            return 1
+            output_file = str(self.output_folder + "\\Daily\\Daily_VoltagesTot_" + fecha_sim + ".csv")
+            dataframe_voltages.to_csv(output_file)
+            return V_mv_prom, V_lv_prom
         except PermissionError:
             self.print_error()
-            aviso = "Por favor cierre los csv anteriormente generados por este plugin para poder generarlos nuevamente"
-            QMessageBox.warning(None, QCoreApplication.translate('dialog', 'Error escritura csv'), aviso)
+            aviso = "Por favor cierre los csv anteriormente generados "
+            aviso += "por este plugin para poder generarlos nuevamente"
+            QMessageBox.warning(None, 'Error escritura csv', aviso)
+            return pandas.DataFrame(), pandas.DataFrame()
         
-        except:
+        except Exception:
+            return pandas.DataFrame(), pandas.DataFrame()
             self.print_error()
 
     """
@@ -1195,8 +1371,8 @@ class QGISrunOpenDSS(object):
             else:
                 folder = ""
             
-            if not os.path.exists( self.output_folder + folder ):
-                os.makedirs( self.output_folder + folder )
+            if not os.path.exists(self.output_folder + folder):
+                os.makedirs(self.output_folder + folder)
             
             #Inicialización de variables
             list_trafos = []
@@ -1208,29 +1384,29 @@ class QGISrunOpenDSS(object):
                 time_trafo = []
                 
                 #Ciclo para recorrer los valores en el vector
-                n_elementos_vect = len( vector_datos )
-                for i in range(  n_elementos_vect ):
-                    value = vector_datos[ i ]
-                    value = float( value )
+                n_elementos_vect = len(vector_datos)
+                for i in range(n_elementos_vect):
+                    value = vector_datos[i]
+                    value = float(value)
                     if value > 1.0:
                         sobrecargas_trafo_actual += 1
-                        time_trafo.append( i )
+                        time_trafo.append(i)
                 
-                #Cuando termina de recorrer las columnas asigna (o no) el DSSName, según sea el caso
+                #Cuando termina de recorrer las columnas asigna (o no)el DSSName, según sea el caso
                 if time_trafo != []:
                     n_trafos_sobrecargados += 1
-                    dato_vector = [ dssname_trafo,  sobrecargas_trafo_actual, time_trafo ]
-                    list_trafos.append( dato_vector )
+                    dato_vector = [dssname_trafo,  sobrecargas_trafo_actual, time_trafo]
+                    list_trafos.append(dato_vector)
                 
             #Se escribe un txt con los resultados
-            line = "Número de trafos con sobrecargas = " + str( n_trafos_sobrecargados ) + "\n"
-            print( line )
-            line += "Lista de trafos sobrecargados:\n" + str( list_trafos )
+            line = "Número de trafos con sobrecargas = " + str(n_trafos_sobrecargados)+ "\n"
+            print(line)
+            line += "Lista de trafos sobrecargados:\n" + str(list_trafos)
             
             
             path_file = self.output_folder + folder + "\OverloadTrafos.txt"
-            f = open( path_file,'w' )            
-            f.write( line )
+            f = open(path_file,'w')           
+            f.write(line)
             f.close()
             return n_trafos_sobrecargados, list_trafos	
         except:
@@ -1252,11 +1428,11 @@ class QGISrunOpenDSS(object):
     *Si hay algún error retorna 0, 0
     """
     
-    def buses_withVoltageProblems(self, dictBuses, folder = "\Daily" ):
+    def buses_withVoltageProblems(self, dictBuses, folder = "\Daily"):
         try:
             
-            if not os.path.exists( self.output_folder + folder ):
-                os.makedirs( self.output_folder + folder )
+            if not os.path.exists(self.output_folder + folder):
+                os.makedirs(self.output_folder + folder)
             
             #Inicialización de variables
             list_BusesWithProblems = []
@@ -1267,34 +1443,34 @@ class QGISrunOpenDSS(object):
             for dssname, vector_datos in dictBuses.items():
                 cant_problemas_bus_act = 0
                 time_bus = []
-                dssname_bus = str( dssname )
+                dssname_bus = str(dssname)
                 
                 #Ciclo para recorrer los valores en el vector
-                n_elementos_vect = len( vector_datos )
-                for i in range(  n_elementos_vect ):
-                    value = vector_datos[ i ]
+                n_elementos_vect = len(vector_datos)
+                for i in range(n_elementos_vect):
+                    value = vector_datos[i]
                     try:
-                        value = float( value )
+                        value = float(value)
                     except: #caso en que no hayan datos para ese bus
                         break
                     if value >= 1.05 or value <= 0.95:
                         cant_problemas_bus_act += 1
-                        time_bus.append( i )
+                        time_bus.append(i)
                 
-                #Cuando termina de recorrer las columnas asigna (o no) el DSSName, según sea el caso
+                #Cuando termina de recorrer las columnas asigna (o no)el DSSName, según sea el caso
                 if cant_problemas_bus_act >= 5:
                     n_buses_con_problemas += 1
-                    dato_vector = [ dssname_bus,  cant_problemas_bus_act, time_bus ]
-                    list_BusesWithProblems.append( dato_vector )
-                    list_DSSNameBusesWithProblems.append( dssname_bus )
+                    dato_vector = [dssname_bus,  cant_problemas_bus_act, time_bus]
+                    list_BusesWithProblems.append(dato_vector)
+                    list_DSSNameBusesWithProblems.append(dssname_bus)
                     
             #Se escribe un txt con los resultados
-            line = "Número de buses con problemas de tensión = " + str( n_buses_con_problemas ) + "\n"
-            line += "Lista de buses con problemas de tensión:\n" + str( list_DSSNameBusesWithProblems )
-            line += "\nInformación adicional de buses con problemas de tensión:\n" + str( list_BusesWithProblems )
+            line = "Número de buses con problemas de tensión = " + str(n_buses_con_problemas)+ "\n"
+            line += "Lista de buses con problemas de tensión:\n" + str(list_DSSNameBusesWithProblems)
+            line += "\nInformación adicional de buses con problemas de tensión:\n" + str(list_BusesWithProblems)
             path_file = self.output_folder + folder + "\BusesWithProblems.txt"
-            f = open( path_file,'w' )            
-            f.write( line )
+            f = open(path_file,'w')           
+            f.write(line)
             f.close()
             
             return n_buses_con_problemas, list_DSSNameBusesWithProblems, list_BusesWithProblems	
@@ -1303,7 +1479,7 @@ class QGISrunOpenDSS(object):
             return 0, 0, 0
     
     """
-    Función encargada de obtener la lista de buses con caídas de tensión (llamando a la función buses_withVoltageProblems) y luego 
+    Función encargada de obtener la lista de buses con caídas de tensión (llamando a la función buses_withVoltageProblems)y luego 
     leyendo el dss de cargas obtiene el bus asociado a las cargas.
     Si la carga tiene un bus con caída de tensión se verifica que sea una carga residencial y se agrega a la lista de casas
     con problemas.
@@ -1313,11 +1489,11 @@ class QGISrunOpenDSS(object):
     
     -Datos retornados:
     *n_casas_con_problemas (int): número de casas con problemas de tensión
-    *list_DSSNameBuseswithProblems (list): lista de casas (dssnames) con problemas de tensión.
+    *list_DSSNameBuseswithProblems (list): lista de casas (dssnames)con problemas de tensión.
     
     
     """
-    def GetVoltageProblems( self, dictBuses, study = "daily"):
+    def GetVoltageProblems(self, dictBuses, study = "daily"):
         try:
             
             #Carpeta donde se guardará, según tipo de estudio
@@ -1328,16 +1504,16 @@ class QGISrunOpenDSS(object):
             else:
                 folder = ""
             
-            if not os.path.exists( self.output_folder + folder ):
-                os.makedirs( self.output_folder + folder )
+            if not os.path.exists(self.output_folder + folder):
+                os.makedirs(self.output_folder + folder)
             
-            n_buses_withProblems, list_DSSNameBuseswithProblems, list_withProblemsBuses = self.buses_withVoltageProblems( dictBuses, folder )
+            n_buses_withProblems, list_DSSNameBuseswithProblems, list_withProblemsBuses = self.buses_withVoltageProblems(dictBuses, folder)
             
             #Inicialización de variables
             n_casas_con_problemas = 0
             list_DSSNamewithProblemsHouses = []
             
-            with open( self.name_lvloads ) as f:
+            with open(self.name_lvloads)as f:
                 lineList = f.readlines()		
             for line in lineList:
                 #Búsqueda de nombre del bus asociado a cargas en archivo dss
@@ -1351,7 +1527,7 @@ class QGISrunOpenDSS(object):
                 in_dss += len("load.")
                 fin_dss = line.find(" ", in_dss)
                 dssname_load = line[in_dss:fin_dss]
-                dssname_load = str( dssname_load )
+                dssname_load = str(dssname_load)
                 
                 #Búsqueda de la "clase" de carga
                 in_class = line.find("class=")
@@ -1365,18 +1541,18 @@ class QGISrunOpenDSS(object):
                 class_ = line[in_class:fin_class]
                 
                 #Se determina si la carga es del tipo residencial y que además el bus asociado esté en la lista de buses con problemas
-                if class_.lower() == "r" and name_bus in list_DSSNameBuseswithProblems:
+                if class_.lower()== "r" and name_bus in list_DSSNameBuseswithProblems:
                     n_casas_con_problemas += 1
-                    list_DSSNamewithProblemsHouses.append( dssname_load )
+                    list_DSSNamewithProblemsHouses.append(dssname_load)
                     
                     
             #Se escribe un txt con los resultados
-            line = "Número de casas con problemas de tensión = " + str( n_casas_con_problemas ) + "\n"
-            print( line )
-            line += "Lista de casas con problemas de tensión:\n" + str( list_DSSNamewithProblemsHouses )            
+            line = "Número de casas con problemas de tensión = " + str(n_casas_con_problemas)+ "\n"
+            print(line)
+            line += "Lista de casas con problemas de tensión:\n" + str(list_DSSNamewithProblemsHouses)           
             path_file = self.output_folder + folder + "\HousesWithVoltageProblems.txt"
-            f = open( path_file,'w' )            
-            f.write( line )
+            f = open(path_file,'w')           
+            f.write(line)
             f.close()
                 
             return n_casas_con_problemas, list_DSSNamewithProblemsHouses
@@ -1384,6 +1560,61 @@ class QGISrunOpenDSS(object):
             self.print_error()
             return 0, 0
         
+
+    """
+    Función que realiza la simulación para determinar las funciones
+    base de cada nodo.
+    Retorna un dataframe con las tensiones base para cada uno de los
+    nodos del circuito
+    """
+    def simulation_to_get_bases(self, dir_network, firstLine,
+                                DSStext, DSScircuit):
+        
+            import pandas as pd
+            ######## FIRST SIMULATION: SNAPSHOT TO GET LN VOLTAGE BASES
+            DSStext.Command = 'clear'  # clean previous circuits
+            DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'
+            DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
+            DSStext.Command = 'Set mode=snapshot'  # Type of Simulation
+            DSStext.Command = 'Set time=(0,0)'  # Set the start simulation time
+            DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the first line to monitor P and Q
+            DSStext.Command = 'batchedit load..* enabled = no' # No load simulation
+            DSStext.Command = 'batchedit storage..* enabled = no' # No load simulation
+            DSStext.Command = 'batchedit PVSystem..* enabled = no' # No load simulation
+            DSStext.Command = 'batchedit Generator..* enabled = no' # No load simulation
+            
+            
+            DSScircuit.Solution.Solve() # solve the circuit
+            
+            all_buses = list(DSScircuit.AllBusVmag)
+            index = list(DSScircuit.AllNodeNames)
+            tam_buses = len(all_buses)
+            #borrar datos innecesarios
+            index_list = []
+            all_buses_list = []
+            
+            for i in range(len(index)):
+                dato = str(index[i]).upper()
+                if 'AFTERMETER' not in dato:
+                    all_buses_list.append(all_buses[i])
+                    index_list.append(index[i])
+                    
+            all_buses = all_buses_list
+
+            Base_V = pd.DataFrame(0, index=index_list, columns=['base'])
+            base_vals = [120, 138, 208, 240, 254, 277, 416, 440, 480,
+                        2402, 4160, 7620, 7967, 13200, 13800, 14380,
+                        19920, 24900, 34500, 79670, 132790]
+            absolute_difference_function = lambda list_value : abs(list_value - busV)
+    
+            for i in range(len(all_buses)):
+                busV = all_buses[i]
+                closest_value = min(base_vals, key=absolute_difference_function)
+                Base_V['base'].iloc[i] = closest_value
+            
+            Base_V.to_csv('bases.csv')
+            return Base_V
+            #End simulation to get bases
 
     
     ##################################################
@@ -1393,6 +1624,7 @@ class QGISrunOpenDSS(object):
     ##################################################
     
     def run(self):
+        import pandas
         plt.close('all')
         #Install the required libraries
         #Instalación comtypes
@@ -1400,20 +1632,10 @@ class QGISrunOpenDSS(object):
             import comtypes.client as cc
         except:
             self.install_libraries("comtypes")
+            print("Instalando comtypes")
             import comtypes.client as cc
             
         #Instalación pandas
-        try:
-            import pandas
-        except:
-            self.install_libraries("pandas")
-            import pandas
-        try:
-            from sklearn.mixture import GaussianMixture
-        except:
-            self.install_libraries("scikit-learn") #Instalación de librerías extra requeridas
-            from sklearn.mixture import GaussianMixture
-        
         print("Instalación de librerías finalizada")
      
         #Se debe poner aquí porque utiliza pandas
@@ -1430,10 +1652,10 @@ class QGISrunOpenDSS(object):
             def_time = '18:00' # default time
     
             try:
-                self.circuit_calling()  # call the networks
+                self.circuit_calling() # call the networks
             except ValueError:
                 exc_info = sys.exc_info()
-                print("\nError: ", exc_info )
+                print("\nError: ", exc_info)
                 print("*************************  Información detallada del error ********************")
                 
                 for tb in traceback.format_tb(sys.exc_info()[2]):
@@ -1443,12 +1665,12 @@ class QGISrunOpenDSS(object):
                 #QMessageBox.warning(None, QCoreApplication.translate('dialog', 'Alerta Transformadores'), aviso)
                 QMessageBox.information(None, QCoreApplication.translate('dialog', "Error al abrir el archivo"), aviso)
             str_time = time.strftime("%Y%m%d%H%M%S",
-                                     time.gmtime())  # This string is used to create an unique time string to be adopted when saving results
+                                     time.gmtime()) # This string is used to create an unique time string to be adopted when saving results
             prjpath = QgsProject.instance().fileName()
             if not prjpath:
                 QMessageBox.information(None, QCoreApplication.translate('dialog', "Error al abrir el archivo"),
                                         QCoreApplication.translate('dialog',
-                                                                   u"El projecto en QGIS debe estar abierto") + "\n" + \
+                                                                   u"El projecto en QGIS debe estar abierto")+ "\n" + \
                                         QCoreApplication.translate('dialog', u"para poder analizar la red de distribución"))
                 return
             dir_general, dir_general2 = prjpath.split('/GIS', 1)
@@ -1456,11 +1678,11 @@ class QGISrunOpenDSS(object):
             self.dlg.lineEdit_dirOutput.clear()
             self.dlg.lineEdit_dirOutput.setText(dir_general)
             os.chdir(dir_network)
-            networks = [d for d in os.listdir('.') if os.path.isdir(d)]
+            networks = [d for d in os.listdir('.')if os.path.isdir(d)]
             
             files_names = list(glob.glob(os.path.join(dir_network, '*.dss')))
             for file in files_names:
-                if len(file.split('\\')[1].split('.')[0].split('_')) > 1:
+                if len(file.split('\\')[1].split('.')[0].split('_'))> 1:
                     if file.split('\\')[1].split('.')[0].split('_')[1] == 'OutputQGIS2OpenDSS':
                         name_file_created = file.split('\\')[1].split('.')[0]
     
@@ -1506,7 +1728,7 @@ class QGISrunOpenDSS(object):
             # show the dialog
             self.dlg.show()
             # Run the dialog event loop
-            result = self.dlg.exec_()        
+            result = self.dlg.exec_()       
             # See if OK was pressed
             
             if result:
@@ -1515,22 +1737,22 @@ class QGISrunOpenDSS(object):
                     self.substation_sel = True
                 else:
                     self.substation_sel = False
-                firstLine = self.firstLine()  # first line name        
+                firstLine = self.firstLine() # first line name        
                 if firstLine == '':
                     QMessageBox.information(None, QCoreApplication.translate('dialog', "Error al iniciar simulación"),
                                             QCoreApplication.translate('dialog',
-                                                                       u"Debe seleccionarse una barra del alimentador válida"))                       
+                                                                       u"Debe seleccionarse una barra del alimentador válida"))                      
                     return
                 ################ All variables defined in the GUI are read here ################
                 # Basic circuit data
                 
                 tinitial = time.time()
-                network = self.dlg.lineEdit_circuit_name.text()  # self.dlg.comboBox_circuit_name.currentIndex()
+                network = self.dlg.lineEdit_circuit_name.text() # self.dlg.comboBox_circuit_name.currentIndex()
                 self.circuitName = network
                 # network = selected_network
                 files_names = list(glob.glob(os.path.join(dir_network, '*.dss')))
                 for file in files_names:                
-                    if len(file.split('\\')[1].split('.')[0].split('_')) > 1:
+                    if len(file.split('\\')[1].split('.')[0].split('_'))> 1:
                         if file.split('\\')[1].split('.')[0].split('_')[1] == 'OutputQGIS2OpenDSS':
                             name_file_created = file.split('\\')[1].split('.')[0]                        
     
@@ -1556,15 +1778,15 @@ class QGISrunOpenDSS(object):
     
                 number_simulations = 1
     
-                load_curve_circuit = self.dlg.lineEdit_load_curve.text()  # Name of the load curve of the circuit
+                load_curve_circuit = self.dlg.lineEdit_load_curve.text() # Name of the load curve of the circuit
                 
                 
                 if load_curve_circuit:
                     import io
-                    with io.open(load_curve_circuit, 'rt', encoding = "ascii") as workbook:
+                    with io.open(load_curve_circuit, 'rt', encoding = "ascii")as workbook:
                         try:
-                            reader = csv.reader(workbook)                    
-                            next(reader)                    
+                            reader = csv.reader(workbook)                   
+                            next(reader)                   
                         
                         
                             circuit_demand = [[row[3], row[2], row[0], row[1]] for row in
@@ -1576,7 +1798,7 @@ class QGISrunOpenDSS(object):
                             
                             return                
     
-                tx_main_bus_circuit = self.dlg.lineEdit_name_busbar.text().upper()  # Name of the main busbar
+                tx_main_bus_circuit = self.dlg.lineEdit_name_busbar.text().upper() # Name of the main busbar
     
                 if not load_curve_circuit and not tx_main_bus_circuit:
                     QMessageBox.information(None, "Informacion Requerida", "Seleccione la curva de demanda del alimentador y \n defina el nombre de la barra principal")
@@ -1597,19 +1819,18 @@ class QGISrunOpenDSS(object):
                 ############### Creación de capas de EVs ###############
                 ########################################################
                 ########################################################
-                #Elimina archivos previamente creados anteriormente por simulaciones de EVs aleatorias
+                #Elimina archivos creados anteriormente por simulaciones de EVs aleatorias
                 study_types = ["random", "consum", "prob"]
                 name_dss_evshape = ""
                 for name in files_names:
-                    nombre = name.lower()                    
+                    nombre = name.lower()                   
                     for study in study_types:
-                        name_search = "_ev" + str( study )
+                        name_search = "_ev" + str(study)
                         if name_search in nombre:
-                            os.remove( name ) #Elimina el archivo creado antes por estudios aleatorios
+                            os.remove(name)#Elimina el archivo creado antes por estudios aleatorios
                     
                     if "loadslv" in nombre: #averigua el nombre del archivo de cargas
-                        name_lvloads = name
-                        self.name_lvloads = name_lvloads #parámetro utilizado en búsqueda de caídas de tensión
+                        name_lvloads_tmp = name
                     #Determina el nombre del archivo de salida del azul
                     if "outputqgis2opendss" in nombre:
                         name_output_azul = name
@@ -1621,31 +1842,78 @@ class QGISrunOpenDSS(object):
                 #Plantel de buses
                 plantel = False
                 #Borra líneas creadas anteriormente en el archivo de salida del azul por simulaciones de EVs aleatorias
-                with open(name_output_azul, "r+") as f:
+                with open(name_output_azul, "r+")as f:
                     lines = f.readlines()
                     f.seek(0)
                     for line in lines:
                         linea_ = line.lower()
                         bandera_study_types = False
+                        
                         #Se fija si el plantel de buses está agregado a la salida del azul
-                        if "plantelesbuses.dss" in linea_:
+                        if "plantelesbuses.dss" in linea_ and linea_[0] != "!":
                             plantel = True
                         if "_ev.dss" in linea_ and linea_[0] != "!": #Busca el nombre del archivo de EVs creado por el azul (si es que existe)
                             name_dss_evshape = name_ev_tmp
+                        if "loadslv" in linea_ and linea_[0] != "!": #averigua el nombre del archivo de cargas
+                            name_lvloads = name_lvloads_tmp
+                            self.name_lvloads = name_lvloads #parámetro utilizado en búsqueda de caídas de tensión
+                            self.cargas = True
+                        if "loadsmv" in linea_ and linea_[0] != "!":
+                            self.cargas = True
+                        if "lineslv" in linea_ and linea_[0] != "!":
+                            self.lv_lines = True
+                        if "linesmv" in linea_ and linea_[0] != "!":
+                            self.mv_lines = True
                         for study in study_types:
-                            name_search = "_ev" + str( study ) 
-                            if name_search in linea_:
+                            name_search = "_ev" + str(study)
+                            if name_search in linea_ and linea_[0] != "!":
                                 bandera_study_types = True
-                        if bandera_study_types == False:
+                        if bandera_study_types is False:
                             f.write(line)
                     f.truncate()
+                    
+                    
+                #AEBs
+                name_storage_dss = str(name_file_created.split('_')[0])+  '_StorageBuses.dss'
+                path_storage_dss = dir_network + "/" + name_storage_dss
+                percentaje_aebs = self.dlg.lineEdit_pen_bes.text()
+                
+                try:
+                    if self.dlg.AEBs.isChecked():
+                        if plantel is True:
+                            #Verificación del porcentaje
+                            try:
+                                if percentaje_aebs == "":
+                                    percentaje_aebs = 20
+                                else: 
+                                    percentaje_aebs = float(percentaje_aebs)                                  
+                                    if percentaje_aebs > 100 or percentaje_aebs < 0:
+                                        aviso = "Debe indicar un valor entre 0 y 100 para el porcentaje de penetración de AEBs"
+                                        QMessageBox.warning(None, "Error porcentaje de penetración AEBs", aviso)
+                                        return
+                                    percentaje_aebs = percentaje_aebs/100
+                            except:
+                                self.print_error()
+                                aviso = "Debe indicar un valor entre 0 y 100 para el porcentaje de penetración de AEBs"
+                                QMessageBox.warning(None, "Error porcentaje de penetración AEBs", aviso)
+                                return
+                                                    
+                            vector_dss = uncomment_lines(path_storage_dss)
+                            comment_lines(vector_dss, path_storage_dss, percentaje_aebs)
+                        else:
+                            aviso = "No se puede seleccionar ese porcentaje de buses eléctrico debido a que no se encuentra un dss de AEBs"
+                            QMessageBox.warning(None, "Error buses eléctricos", aviso)
+                except:
+                            self.print_error()
+                            aviso = "Ocurrió un error al depurar el archivo dss de AEBs"
+                            QMessageBox.warning(None, "Error AEBs", aviso)
                 
                 #Inicialización de vector de SOC_t
                 vector_soc_t = {}
                 for x in range(0,96):
                     vector_soc_t[x] = {}   
                 if name_dss_evshape != "":
-                    vector_soc_t = CreateList_SOC_t( name_dss_evshape, vector_soc_t )
+                    vector_soc_t = CreateList_SOC_t(name_dss_evshape, vector_soc_t)
                 
                 #Creación de EVs aleatorios
                 if self.dlg.EV.isChecked():
@@ -1667,7 +1935,7 @@ class QGISrunOpenDSS(object):
                             return
                         else:
                             try:
-                                with open(path_csv, 'r') as f:
+                                with open(path_csv, 'r')as f:
                                     reader = csv.reader(f)
                                     list_prob = list(reader)
                             except:
@@ -1682,13 +1950,13 @@ class QGISrunOpenDSS(object):
                     if not percent_evs:
                         percent_evs = 20 # default to 20% of penetration
                     
-                    percent_evs = int( percent_evs )
+                    percent_evs = int(percent_evs)
                     if percent_evs > 100 or percent_evs <= 0:
                         aviso = "Debe indicar un valor entre 0 y 100 para el porcentaje de penetración de VEs"
                         QMessageBox.warning(None, "Error porcentaje de penetración VEs", aviso)
                         return
                         
-                    vector_soc_t = CreateEVDss( name_lvloads, study_type, percent_evs, self.circuitName, name_output_azul, vector_soc_t, name_dss_evshape, list_prob = list_prob  )
+                    vector_soc_t = CreateEVDss(name_lvloads, study_type, percent_evs, self.circuitName, name_output_azul, vector_soc_t, name_dss_evshape, list_prob = list_prob )
                     if vector_soc_t == 0:
                         return
                 # Transformer data
@@ -1728,11 +1996,17 @@ class QGISrunOpenDSS(object):
                         setNew = 'Edit'
                         if self.substation == 'None':
                             setNew = 'New'
-                        line_tx_definition = setNew + ' transformer.HVMV phases=3 windings=3 buses=[sourcebus,' + tx_main_bus_circuit + ',' + tx_tertiary_bus_circuit + '] conns=[' \
-                                             + tx_conn_high + ',' + tx_conn_low + ',' + tx_conn_tertiary + '] kvs=[' + tx_voltage_high + ',' + tx_voltage_low + ',' + tx_voltage_tertiary \
-                                             + '] kvas=[' + tx_power_high + ',' + tx_power_low + ',' + tx_power_tertiary + '] xhl=' + tx_reactance_hl + ' xht=' + tx_reactance_ht + ' xlt=' + tx_reactance_lt \
-                                             + ' %loadloss=' + tx_lossess_inload + ' %noloadloss=' + tx_lossess_noload + ' wdg=' + tx_ltc_location_definition + ' numtaps=' + tx_number_taps \
-                                             + ' tap=' + tx_current_tap_position + ' maxtap=' + tx_max_tap_position + ' mintap=' + tx_min_tap_position
+                        line_tx_definition = setNew + ' transformer.HVMV phases=3 windings=3 buses=[sourcebus,' 
+                        line_tx_definition += tx_main_bus_circuit + ',' + tx_tertiary_bus_circuit + '] conns=[' 
+                        line_tx_definition += tx_conn_high + ',' + tx_conn_low + ',' + tx_conn_tertiary + '] kvs=['
+                        line_tx_definition += tx_voltage_high + ',' + tx_voltage_low + ',' + tx_voltage_tertiary
+                        line_tx_definition += '] kvas=[' + tx_power_high + ',' + tx_power_low + ',' + tx_power_tertiary
+                        line_tx_definition += '] xhl=' + tx_reactance_hl + ' xht=' + tx_reactance_ht
+                        line_tx_definition += ' xlt=' + tx_reactance_lt  + ' %loadloss=' + tx_lossess_inload 
+                        line_tx_definition += ' %noloadloss=' + tx_lossess_noload + ' wdg='
+                        line_tx_definition += tx_ltc_location_definition + ' numtaps=' + tx_number_taps
+                        line_tx_definition += ' tap=' + tx_current_tap_position + ' maxtap='
+                        line_tx_definition += tx_max_tap_position + ' mintap=' + tx_min_tap_position
                         # ------------------------------------    
                     else:
                         tx_voltage_high = self.transformer.lineEdit_voltage_high.text().upper()
@@ -1760,11 +2034,18 @@ class QGISrunOpenDSS(object):
                         setNew = 'Edit'
                         if self.substation == 'None': # if no substation was modelled on QGIS2OpenDSS but is desired to add one
                             setNew = 'New'
-                        line_tx_definition = setNew + ' transformer.HVMV phases=3 windings=2 buses=[sourcebus,' + tx_main_bus_circuit + '] conns=[' \
-                                             + tx_conn_high + ',' + tx_conn_low + '] kvs=[' + tx_voltage_high + ',' + tx_voltage_low + '] kvas=[' + tx_power_high \
-                                             + ',' + tx_power_low + '] xhl=' + tx_reactance_hl + ' %loadloss=' + tx_lossess_inload + ' %noloadloss=' + tx_lossess_noload \
-                                             + ' wdg=' + tx_ltc_location_definition + ' numtaps=' + tx_number_taps + ' tap=' + tx_current_tap_position + ' maxtap=' + tx_max_tap_position \
-                                             + ' mintap=' + tx_min_tap_position
+                        line_tx_definition = setNew + ' transformer.HVMV phases=3 windings=2 buses=[sourcebus,'
+                        line_tx_definition += tx_main_bus_circuit + '] conns=[' + tx_conn_high + ','
+                        line_tx_definition += tx_conn_low + '] kvs=[' + tx_voltage_high + ','
+                        line_tx_definition += tx_voltage_low + '] kvas=[' + tx_power_high
+                        line_tx_definition += ',' + tx_power_low + '] xhl=' + tx_reactance_hl 
+                        line_tx_definition += ' %loadloss=' + tx_lossess_inload 
+                        line_tx_definition += ' %noloadloss=' + tx_lossess_noload
+                        line_tx_definition += ' wdg=' + tx_ltc_location_definition + ' numtaps='
+                        line_tx_definition += tx_number_taps + ' tap='
+                        line_tx_definition += tx_current_tap_position
+                        line_tx_definition += ' maxtap=' + tx_max_tap_position
+                        line_tx_definition += ' mintap=' + tx_min_tap_position
                         # ------------------------------------    
                     
                     #
@@ -1776,41 +2057,46 @@ class QGISrunOpenDSS(object):
                     tx_active = True
                     tx_conn_low = 'wye'
                     pass
-                else: # self.substation == 'None':  # If transformer is not modelled, then the sourcebus is connected straight to a MV line
+                
+                else:  # If transformer is not modelled, then the sourcebus is connected straight to a MV line
                     tx_active = False
                     line_tx_definition = ''
+                    """
                     new_lines_file = open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_mod.dss', 'w')
-                    with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV.dss', 'r') as temp:
+                    
+                    with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV.dss', 'r')as temp:
                         for aux in temp:
                             linetemp = re.sub(r"\b%s\b" % tx_main_bus_circuit + '.1.2.3', 'Sourcebus', aux)
                             new_lines_file.write(linetemp)
                     new_lines_file.close()
+                    """
+                
     
                 # add PV systems            
                 if self.dlg.PV.isChecked():
                     PVS = list()
                     # study type
                     pv_study_type = self.gui_gd.dlg.comboBoxPVTipoEstudio.currentText()
-                    if QCoreApplication.translate('dialog', "Mayor consumo") in pv_study_type:
+                    if QCoreApplication.translate('dialog', "Mayor consumo")in pv_study_type:
                         pv_study_type = "Maximum"
-                    if QCoreApplication.translate('dialog', "Por probabilidad") in pv_study_type:
+                    if QCoreApplication.translate('dialog', "Por probabilidad")in pv_study_type:
                         pv_study_type = "Bernoulli"
-                    if QCoreApplication.translate('dialog', "Aleatorio") in pv_study_type:
+                    if QCoreApplication.translate('dialog', "Aleatorio")in pv_study_type:
                         pv_study_type = "Random"
     
                     # Residential
-                    if self.gui_gd.dlg.checkBox_PV_res.isChecked() and self.dlg.PV.isChecked():                    
+                    if self.gui_gd.dlg.checkBox_PV_res.isChecked()and self.dlg.PV.isChecked():                    
                         total_capacity = self.gui_gd.dlg.lineEdit_pv_capacity.text()
                         pv_information = self.gui_gd.dlg.lineEdit_pv_info.text()
     
                         if not total_capacity:
-                            total_capacity = str(200) # default to 200 kW
+                            total_capacity = str(200)# default to 200 kW
                         if not pv_information:
                             QMessageBox.information(None, "Informacion Requerida", "Seleccione el archivo de información de generación distribuida para clientes residenciales")
                             return
     
                     # General
-                    if self.gui_gd.dlg.checkBox_PV_gen.isChecked() and self.dlg.PV.isChecked():
+                    if self.gui_gd.dlg.checkBox_PV_gen.isChecked()and self.dlg.PV.isChecked():
                         total_capacity_gen = self.gui_gd.dlg.lineEdit_pv_capacity_gen.text()
                         pv_information_gen = self.gui_gd.dlg.lineEdit_pv_info_gen.text()
     
@@ -1821,7 +2107,7 @@ class QGISrunOpenDSS(object):
                             return
     
                     # TMT
-                    if self.gui_gd.dlg.checkBox_PV_TMT.isChecked() and self.dlg.PV.isChecked():
+                    if self.gui_gd.dlg.checkBox_PV_TMT.isChecked()and self.dlg.PV.isChecked():
                         total_capacity_TMT = self.gui_gd.dlg.lineEdit_pv_capacity_TMT.text()
                         pv_information_TMT = self.gui_gd.dlg.lineEdit_pv_info_TMT.text()
     
@@ -1831,7 +2117,7 @@ class QGISrunOpenDSS(object):
                             QMessageBox.information(None, "Informacion Requerida", "Seleccione el archivo de información de generación distribuida para clientes TMT")
                             return
     
-                output_folder = self.dlg.lineEdit_dirOutput.text()  # Output folder
+                output_folder = self.dlg.lineEdit_dirOutput.text() # Output folder
                 if not output_folder:  # Default path is otherwise used
                     output_folder = "C:/QGISrunOpenDSS_Results"  # def_out_folder
                     if not os.path.exists(output_folder):
@@ -1842,35 +2128,69 @@ class QGISrunOpenDSS(object):
                 dir_profiles = os.path.join(dir_network,
                                             'profiles')
                 # update loadshapes files path on *.dss
-                
-                load_profiles = auxfcns.ReadLoadProfiles(self, dir_profiles,
+                if self.cargas == True:
+                    load_profiles = auxfcns.ReadLoadProfiles(self, dir_profiles,
                                                          dir_network,
                                                          name_file_created)
-                # exit if an error occurred
-                if load_profiles[0] == "ERROR":
-                    print("Error load_profiles")
-                    return
+                    # exit if an error occurred
+                    if load_profiles[0] == "ERROR":
+                        print("Error load_profiles")
+                        return
                 
                 [DSSobj, DSSstart, DSStext, DSScircuit,
-                 DSSprogress] = auxfcns.SetUpCOMInterface()  # Inicializacion de la interfaz COM de OpenDSS
+                 DSSprogress] = auxfcns.SetUpCOMInterface() # Inicializacion de la interfaz COM de OpenDSS
+                 
+                with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV.dss', 'r+') as f:   #save file's original settings
+                        original_lines = f.readlines()
+                        f.close
     
                 # Master.dss file creation
                 created_files = open(dir_network + '/' + name_file_created + '.dss', 'r')
                 created_files = created_files.read()
-                if tx_active == False:
+                if tx_active is False:
                     created_files = created_files.replace(name_file_created.split('_')[0] + '_LinesMV',
                                                           name_file_created.split('_')[0] + '_LinesMV_mod')
                     created_files = created_files.replace('redirect ' + name_file_created.split('_')[0] + '_Substation.dss', '')
-                
-                elif (tx_active == True) and (self.dlg.powerflow_snapshot.isChecked() or self.dlg.powerflow_daily.isChecked()):
+                    firstLine = 'MV3P' + name_file_created.split('_')[0] + '00'
                     
-                    with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV.dss', 'r+') as f:   #save file's original settings
-                        original_lines = f.readlines()
-                        f.close
+                    with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_mod.dss', 'w') as the_file:
+                            lines = copy.deepcopy(original_lines)
+                            lines.insert(0,'new line.' + firstLine + ' bus1=Sourcebus bus2=AFTERMETER r1=0.00001 x1=0.00001 length=0.0001 units=m \n')
+                            the_file.seek(0)
+                                
+                            for line_num in range(1,len(lines)):
+                                whole_line = lines[line_num].split(' ')
+                                bus1 = lines[line_num].split(' ')[2]
+                                bus2 = lines[line_num].split(' ')[3]
+                                
+                                if bus1.split('=')[1].split('.')[0].split(name_file_created.split('_')[0])[1] == '1':
+                                    lines[line_num] = ''
+                                    for elem in range(len(whole_line)):
+                                        if elem == 2: #campo del bus 1
+                                            lines[line_num] = lines[line_num] + 'bus1=AFTERMETER '
+                                        elif elem == len(whole_line)-1:
+                                            lines[line_num] = lines[line_num] +  whole_line[elem]
+                                        else:
+                                            lines[line_num] = lines[line_num] + whole_line[elem] + ' '
+                                
+                                elif bus2.split('=')[1].split('.')[0].split(name_file_created.split('_')[0])[1] == '1':
+                                    lines[line_num] = ''
+                                    for elem in range(len(whole_line)):
+                                        if elem == 3: #campo del bus 1
+                                            lines[line_num] = lines[line_num] + 'bus2=AFTERMETER '
+                                        elif elem == len(whole_line)-1:
+                                            lines[line_num] = lines[line_num] +  whole_line[elem]
+                                        else:
+                                            lines[line_num] = lines[line_num] + whole_line[elem] + ' '
+                           
+                            the_file.writelines(lines)
+                            
+                            the_file.close
                     
+                elif (tx_active is True) and (self.dlg.powerflow_snapshot.isChecked()or self.dlg.powerflow_daily.isChecked()):
                     if self.dlg.powerflow_snapshot.isChecked():
                     
-                        with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_snap.dss', 'w') as the_file:
+                        with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_snap.dss', 'w')as the_file:
                             lines = copy.deepcopy(original_lines)
                             lines.insert(0,'new line.MV3P'+name_file_created.split('_')[0]+'00 bus1=BUSMV'+name_file_created.split('_')[0]+'1.1.2.3 bus2=AFTERMETER r1=0.00001 x1=0.00001 length=0.0001 units=m \n')
                             the_file.seek(0)
@@ -1900,7 +2220,7 @@ class QGISrunOpenDSS(object):
                                         else:
                                             lines[line_num] = lines[line_num] + whole_line[elem] + ' '
                            
-                            the_file.writelines(lines) 
+                            the_file.writelines(lines)
                             
                             the_file.close
                             
@@ -1909,7 +2229,7 @@ class QGISrunOpenDSS(object):
                     
                     elif self.dlg.powerflow_daily.isChecked():
                     
-                        with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_daily.dss', 'w') as the_file:
+                        with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_daily.dss', 'w')as the_file:
                             lines = copy.deepcopy(original_lines)
                             lines.insert(0,'new line.MV3P'+name_file_created.split('_')[0]+'00 bus1=BUSMV'+name_file_created.split('_')[0]+'1.1.2.3 bus2=AFTERMETER r1=0.00001 x1=0.00001 length=0.0001 units=m \n')
                             the_file.seek(0)
@@ -1939,7 +2259,7 @@ class QGISrunOpenDSS(object):
                                         else:
                                             lines[line_num] = lines[line_num] + whole_line[elem] + ' '
                            
-                            the_file.writelines(lines) 
+                            the_file.writelines(lines)
                             
                             the_file.close
                             
@@ -1950,30 +2270,53 @@ class QGISrunOpenDSS(object):
                 
                 file = open(dir_network + '/Master.dss', 'w')
                 file.write('set defaultbasefrequency=' + frequency + '\n')
+                source_voltage = self.dlg.lineEdit_sourcevoltage.text()
+                try:
+                    float(source_voltage)
+                except ValueError:
+                    msj = "El voltage de la fuente debe ser un número"
+                    QMessageBox.information(None, QCoreApplication.translate('dialog', u"Error en voltage de la fuente"),
+                                            QCoreApplication.translate('dialog', msj))
+                    return
+                    
+                if source_voltage == "":
+                    source_voltage = "1.0"
                 if self.dlg.SCMVA.isChecked():  # SC MVAs
-                    file.write('Edit Vsource.Source BasekV=' + volt_nom + ' pu=1.00 angle=' + phase_angle +
-                               ' frequency=' + frequency + ' phases=3 MVAsc3='
-                               + three_phase_SC + ' MVAsc1=' + single_phase_SC + '\n')
+                    line = 'Edit Vsource.Source BasekV=' + volt_nom
+                    line += ' pu=' + source_voltage + ' angle='
+                    line += phase_angle + ' frequency=' + frequency
+                    line += ' phases=3 MVAsc3=' + three_phase_SC
+                    line += ' MVAsc1=' + single_phase_SC + '\n'
+                    file.write(line)
                 if self.dlg.SCkA.isChecked():  # SC kAs
-                    file.write('Edit Vsource.Source BasekV=' + volt_nom + ' pu=1.00 angle=' + phase_angle +
-                               ' frequency=' + frequency + ' phases=3 Isc3='
-                               + str(float(three_phase_SC) * 1000) + ' Isc1=' + str(float(single_phase_SC) * 1000) + '\n')
-                tx_modelling = False
+                    line = 'Edit Vsource.Source BasekV=' + volt_nom
+                    line += ' pu=' + source_voltage + ' angle='
+                    line += phase_angle + ' frequency=' + frequency
+                    line += ' phases=3 Isc3=' + str(float(three_phase_SC)*1000)
+                    line += ' Isc1=' + str(float(single_phase_SC)*1000) + '\n'
+                    file.write(line)
+                
                 if self.dlg.transformer_modelling.isChecked():  # see if transformer_modelling checkbox is active
                     tx_modelling = True
+                else:
+                    tx_modelling = False
+                    
     
                 file.write(created_files + '\n')
-                file.close()          
+                file.close()         
                 
     
-                time_common_for_all = time.time() - tinitial
+                time_common_for_all = time.time()- tinitial
                 #Inicialización de variables
                 P_to_be_matched = 0
                 Q_to_be_matched = 0
+                
+                #changes on mvlines
+                circuit_name = name_file_created.split('_')[0]
     
-                ######################################################################
-                ###########################    SNAPSHOT     ##########################
-                ######################################################################
+                # ##############################################
+                # #############    SNAPSHOT     ################
+                # ##############################################
                 # Routine to perform snapshot power flows
                 if self.dlg.powerflow_snapshot.isChecked():
     
@@ -1981,102 +2324,58 @@ class QGISrunOpenDSS(object):
                     DSSprogress.Caption = QCoreApplication.translate('progress', u'Snapshot')
                     DSSprogress.PctProgress = 0              
     
-                    tinitial_snapshot = time.time() # time counter
+                    tinitial_snapshot = time.time()# time counter
                     snapshotdate = self.dlg.lineEdit_snapshot_date.text().upper()
-                    snapshotdate = correct_date( load_curve_circuit, snapshotdate )
+                    snapshotdate = correct_date(load_curve_circuit, snapshotdate)
                     if not snapshotdate:
                         snapshotdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
                     self.snapshotdate = snapshotdate
-    
-                    snapshottime = self.dlg.lineEdit_snapshot_time.text() # read sim hour
-                    snapshottime = correct_hour( load_curve_circuit, snapshottime )
+                    snapshottime = self.dlg.lineEdit_snapshot_time.text()# read sim hour
+                    snapshottime = correct_hour(load_curve_circuit, snapshottime)
     
                     if not snapshottime:
                         snapshottime = def_time  # Default is 6pm
     
                     h, m = snapshottime.split(':')
                     if m is not '00' or '15' or '30' or '45':  # round sim minutes
-                        if int(m) <= 7:
+                        if int(m)<= 7:
                             m = '00'
-                        elif int(m) <= 22:
+                        elif int(m)<= 22:
                             m = '15'
-                        elif int(m) <= 37:
+                        elif int(m)<= 37:
                             m = '30'
-                        elif int(m) <= 52:
+                        elif int(m)<= 52:
                             m = '45'
                         else:
                             m = '00'
-                            h = str(int(h) + 1)
-                            if int(h) == 24:  # last round on 23:45
+                            h = str(int(h)+ 1)
+                            if int(h)== 24:  # last round on 23:45
                                 h = '23'
                                 m = '45'
                     snapshottime = h + ':' + m
                     
-                    day_ = snapshotdate.replace('/', '')
-                    day_ = day_.replace('-', '')               
+                    day_ = str(snapshotdate).replace('/', '')
+                    day_ = day_.replace('-', '')              
     
-                    daily_strtime = str(day_ + snapshottime.replace(':', ''))                
+                    daily_strtime = str(day_ + snapshottime.replace(':', ''))               
                     hora_sec = snapshottime.split(':')
                     for ij in range(len(circuit_demand)):
                         temp_a = circuit_demand[ij][0]  # day
                         temp_b = circuit_demand[ij][1]  # hour                    
-                        if str(temp_a.replace('/', '') + temp_b.replace(':', '')) == daily_strtime:                        
+                        if str(temp_a.replace('/', '')+ temp_b.replace(':', ''))== daily_strtime:                        
                             P_to_be_matched = circuit_demand[ij][2]  # Active power
                             Q_to_be_matched = circuit_demand[ij][3]  # Reactive power
                     
-                    print( "Progreso = 17 " )
+                    print("Progreso = 17 ")
                     DSSprogress.PctProgress = 17
                     
+                    if self.substation_sel is True:
+                        firstLine = 'MV3P' + circuit_name + '00'
                     
-                    #changes on mvlines
-                    if self.substation_sel == True:
-                        
-                        circuit_name = name_file_created.split('_')[0]
-                        firstLine = 'MV3P'+circuit_name+'00'
-                        
-                    ######## FIRST SIMULATION: SNAPSHOT TO GET LN VOLTAGE BASES
-
-                    DSStext.Command = 'clear'  # clean previous circuits
-                    DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'
-                    DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
-                    DSStext.Command = 'Set mode=snapshot'  # Type of Simulation
-                    # DSStext.Command = 'Set number=1'  # Number of steps to be simulated
-                    # DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s)
-                    DSStext.Command = 'Set time=(0,0)'  # Set the start simulation time
-                    DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the first line to monitor P and Q
-                    DSStext.Command = 'batchedit load..* enabled = no' # No load simulation
-                    DSStext.Command = 'batchedit storage..* enabled = no' # No load simulation
-                    DSStext.Command = 'batchedit PVSystem..* enabled = no' # No load simulation
-                    DSStext.Command = 'batchedit Generator..* enabled = no' # No load simulation
+                    # #### FIRST SIMULATION: SNAPSHOT TO GET LN VOLTAGE BASES
+                    Base_V = self.simulation_to_get_bases(dir_network, firstLine, DSStext, DSScircuit)
                     
-                    
-                    DSScircuit.Solution.Solve()  # solve the circuit
-                    
-                    all_buses = list(DSScircuit.AllBusVmag)
-                    index = list(DSScircuit.AllNodeNames)
-                    tam_buses = len(all_buses)
-                    #borrar datos innecesarios
-                    del_bus = []
-                        
-                    for i in range(len(index)):
-                        if 'AFTERMETER' in str(index[i]).upper():
-                            del_bus.append(i)
-                    
-                    num_del_buses = len(del_bus)
-                    
-                    for j in range(num_del_buses-1,-1,-1):
-                        index.remove(index[del_bus[j]])
-                        all_buses.remove(all_buses[del_bus[j]])
-                    
-                    Base_V = pandas.DataFrame(0, index = index, columns=['base'])
-                    base_vals = [120, 138, 208, 240, 254, 277, 416, 440, 480, 7620, 7967, 13200, 13800, 14380, 19920, 24900, 34500, 79670, 132790]
-                    for i in range(len(all_buses)):
-                        busV = all_buses[i]
-                        Base_V['base'].iloc[i] = base_vals[[abs(val-busV) for val in base_vals].index(min([abs(val-busV) for val in base_vals]))] #selecciona el index que de la mínima resta
-                    
-                    Base_V.to_csv('bases.csv')
-                    #End simulation to get bases
-                    
+                    # Second simulation
                     DSStext.Command = 'clear'
                     DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'
                     DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
@@ -2093,7 +2392,7 @@ class QGISrunOpenDSS(object):
                         # Run the daily power flow for a particular moment
                         gen_p = 0
                         gen_q = 0
-                        DSScircuit.Solution.Solve()  # Initialization solution                        
+                        DSScircuit.Solution.Solve() # Initialization solution                        
                         DSScircuit.setActiveElement('line.' + firstLine)
                         temp_powers = DSScircuit.ActiveElement.Powers                        
 
@@ -2127,6 +2426,7 @@ class QGISrunOpenDSS(object):
 
                         #DSStext.Command = 'batchedit storage..* enabled = no' # No storage simulation
                         # load allocation algorithm
+                        max_it_correction = 100
                         [DSScircuit, errorP_i, errorQ_i, temp_powersP, temp_powersQ, kW_sim,
                          kVAr_sim] = auxfcns.PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ,
                                                           max_it_correction,
@@ -2137,7 +2437,7 @@ class QGISrunOpenDSS(object):
                             self.iface.messageBar().pushCritical("QGIS2RunOpenDSS", "Sucedió un error grave y no fue posible completar la operación")
                             return
                             
-                        print( "Progreso = 50" )           
+                        print("Progreso = 50")
                         
                         DSSprogress.PctProgress = 50
                         #### Post load allocation simmulation
@@ -2145,8 +2445,8 @@ class QGISrunOpenDSS(object):
                         DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'
                         
                         DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
-                        if plantel == True: #se agregan los buses si hay un archivo del plantel de buses
-                            DSStext.Command = 'redirect ' + str(name_file_created.split('_')[0]) +  '_StorageBuses.dss'
+                        if plantel is True: #se agregan los buses si hay un archivo del plantel de buses
+                            DSStext.Command = 'redirect ' + str(name_file_created.split('_')[0])+  '_StorageBuses.dss'
                         DSStext.Command = 'New Energymeter.Sub line.' + firstLine #Energymeter in the substation. It allows to perform the voltage profile plot
                         DSStext.Command = 'Set mode=daily'  # Type of Simulation
                         DSStext.Command = 'Set number=1'  # Number of steps to be simulated
@@ -2174,7 +2474,6 @@ class QGISrunOpenDSS(object):
                                     print("Error")
                                     return
                                 DSStext.Command = PVS[pv]
-                                #print("PVS[pv] = ", PVS[pv])
                                 #DSStext.Command = 'solve'
     
                         DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the transformer secondary side to monitor P and Q
@@ -2186,37 +2485,36 @@ class QGISrunOpenDSS(object):
                         currentList = []
     
                         try:
-                            DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[0]) # kW corrector
+                            DSStext.Command = 'batchedit load.n_.* kW=' + str(kW_sim[0])# kW corrector
                         except TypeError: #error debido a que no se encontró la fecha
                             QMessageBox.critical(None, QCoreApplication.translate('dialog', "Error"), QCoreApplication.translate('dialog',
                                                                            u'Debe introducir una fecha y hora que coincida con alguna fecha en el .csv de la curva del alimentador.\nIgualmente puede dejar en blanco y se seleccionará el día más representativo'))
                             return
                             
-                        DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[0]) # kVAr corrector
+                        DSStext.Command = 'batchedit load.n_.* kVAr=' + str(kVAr_sim[0])# kVAr corrector
                         DSScircuit.Solution.Solve()
     
                         DSSprogress.PctProgress = 51
-                        ###############################################################
+                        ###########################################
                         all_buses = list(DSScircuit.AllBusVmag)
                         index = list(DSScircuit.AllNodeNames)
                         distance = list(DSScircuit.AllNodeDistances)
                         #eliminar los buses creados por el energy meter
-                        del_bus = []
                         
+                        index_list = []
+                        all_buses_list = []
+                        distance_list = []
                         for i in range(len(index)):
-                            if 'AFTERMETER' in str(index[i]).upper():
-                                del_bus.append(i)
-                        
-                        num_del_buses = len(del_bus)
-                        
-                        for j in range(num_del_buses-1,-1,-1):
-                            index.remove(index[del_bus[j]])
-                            all_buses.remove(all_buses[del_bus[j]])
-                            distance.remove(distance[del_bus[j]])
-                            
+                            dato = str(index[i]).upper()
+                            if 'AFTERMETER' not in dato:
+                                all_buses_list.append(all_buses[i])
+                                index_list.append(index[i])
+                                distance_list.append(distance[i])
+                                
+                        all_buses = all_buses_list
+                        distance = distance_list
                         buses_pu = []
-                        
-                        if len(all_buses) != len(Base_V['base']):
+                        if len(all_buses)!= len(Base_V['base']):
                             QMessageBox.critical(None, QCoreApplication.translate('dialog', "Error"), QCoreApplication.translate('dialog',
                                                                                                    u'Verifique que todas las cargas estén conectadas correctamente a las líneas.\nNota: confirme que las cargas estén conectadas a las fases adecuadas. '))
                             DSSprogress.Close()
@@ -2226,13 +2524,25 @@ class QGISrunOpenDSS(object):
                             valor_pu = all_buses[i]/Base_V['base'].iloc[i]
                             buses_pu.append(valor_pu)
 
-                        V_buses = pandas.DataFrame(buses_pu, index = index, columns = ['voltage'] )
+                        V_buses = pandas.DataFrame(buses_pu, index=index_list, columns = ['voltage'])
                         V_buses['distance'] = distance
                         V_buses.to_csv('voltages.csv')
+                        
+                        # Se ajustan las tensiones en buses para escribirlo en capas
+                        V_buses_write = V_buses['voltage']
+                        V_buses_write.index = V_buses_write.index.map(str)
+                        V_buses_write.index = V_buses_write.index.map(lambda x: x[:x.find(".")].upper())
+                        V_buses_write = V_buses_write.groupby(V_buses_write.index).mean()
+                        V_buses_write = V_buses_write.to_frame()
+                        V_buses_write = V_buses_write.rename(columns={'voltage': 0})
+                        V_buses_write = V_buses_write.to_dict(orient='index')
+
                         ###############################################################
                         # kV base for all buses, must go after solution
-                        DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
-                        DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
+                        if self.lv_lines is True:
+                                DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
+                        if self.mv_lines is True:
+                            DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
                         # Extract Voltage Values
                         
                         # Extract V from all nodes
@@ -2241,33 +2551,32 @@ class QGISrunOpenDSS(object):
                         nodeNames_ph3 = DSScircuit.AllNodeNamesByPhase(3)
                         # all line names
                         lineNames = DSScircuit.Lines.allnames
-                        normalAmpsDic = auxfcns.normalAmps(DSScircuit, lineNames)  # ampacities dictionary
-                        nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)])  # Buses pu voltages ph1
-                        nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)])  # Buses pu voltages ph2
-                        nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)])  # Buses pu voltages ph3
+                        normalAmpsDic = auxfcns.normalAmps(DSScircuit, lineNames) # ampacities dictionary
+                        nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)]) # Buses pu voltages ph1
+                        nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)]) # Buses pu voltages ph2
+                        nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)]) # Buses pu voltages ph3
                         
                         trafosDict, trafosNames = auxfcns.ReadTrafosLoad(self, DSScircuit, DSStext, name_file_created)
                         busesDict = auxfcns.ReadBusVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nodeNames_ph1, nodeNames_ph2, nodeNames_ph3)
                         
                         #Se determina el número de sobrecargas de los trafos y problemas de tensión en casas
-                        n_sobrecargas, lista_sobrecargas = self.overload_trafos( trafosDict, study = "snapshot" )
-                        
+                        n_sobrecargas, lista_sobrecargas = self.overload_trafos(trafosDict, study = "snapshot")
                         # save results on shapes
                         if self.dlg.checkBox_capas.isChecked():
                             currentList.append(
-                                auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic, study))  # Normalized currents
+                                auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic, study)) # Normalized currents
                             # voltages shapes update
-                            auxfcns.WriteBusVolts(self, busesDict, name_file_created, study)
-    
+                            #auxfcns.WriteBusVolts(self, busesDict, name_file_created, study)
+                            auxfcns.WriteBusVolts(self, V_buses_write, name_file_created, study)
                             DSSprogress.PctProgress = 68
                             # currents shape update
-                            list_layersTrafos, list_layersLinesMV, list_layersLinesLV = auxfcns.get_layersnames( self.name_output_azul )
+                            list_layersTrafos, list_layersLinesMV, list_layersLinesLV = auxfcns.get_layersnames(self.name_output_azul)
                             auxfcns.lineCurrentsResults(self, lineNames, currentList, study, list_layersLinesMV, list_layersLinesLV)
                             # transformer overload shape update
                             auxfcns.WriteTrafosLoad(self, trafosDict, trafosNames, study, list_layersTrafos)
                         DSSprogress.PctProgress = 75
     
-                        final_output_folder = output_folder + '/Snapshot/'# + 'MC_' + str(MC_iteration + 1) + '/'
+                        final_output_folder = output_folder + '/Snapshot/'# + 'MC_' + str(MC_iteration + 1)+ '/'
                         if not os.path.exists(final_output_folder):
                             os.makedirs(final_output_folder)
     
@@ -2276,7 +2585,6 @@ class QGISrunOpenDSS(object):
     
                         DSStext.Command = 'monitor.HVMV_PQ_vs_Time.action=take'
                         DSStext.Command = 'export monitors HVMV_PQ_vs_Time'
-    
                         # circuit losses
                         if self.dlg.checkBoxLosses.isChecked():
                             DSStext.Command = 'export losses'
@@ -2291,14 +2599,14 @@ class QGISrunOpenDSS(object):
     
                             x, y = list(zip(*list(orderedUnbalance.items())))
                             x_labels = []  # create an empty list to store the labels
-                            if len(x) <= 7:
+                            if len(x)<= 7:
                                 steps = 1
                             else:
-                                steps = len(x) / 7
+                                steps = len(x)/ 7
                             ticksIndex = np.arange(start = 0, stop = len(x), step = steps, dtype = int)
                             for key in ticksIndex:
                                 x_labels.append(x[key])
-                            fig, ax = plt.subplots( num = "Desbalance de tensión")
+                            fig, ax = plt.subplots(num = "Desbalance de tensión")
                             plt.plot(y, label=QCoreApplication.translate('graphs', u'Desbalance'))
                             plt.title(QCoreApplication.translate('graphs', u'Desbalance de tensión'))
                             DSScircuit.Monitors.ResetAll()
@@ -2311,17 +2619,17 @@ class QGISrunOpenDSS(object):
                             plt.legend(fontsize=8, loc=2)
                             plt.tight_layout()
                             mng = plt.get_current_fig_manager()
-                            mng.window.showMaximized() 
+                            mng.window.showMaximized()
                             #fig.show()
                             fig.savefig(final_output_folder + '/' + network + '_Unbalance_' + str_time + '.pdf',
                                         format='pdf',
                                         dpi=6000)
                             csvFile = final_output_folder + '/' + network + '_Unbalance_' + str_time + '.csv'
-                            with open(csvFile, 'w') as f:
+                            with open(csvFile, 'w')as f:
                                 w = csv.writer(f, lineterminator='\n')
                                 w.writerow(["Bus", "Unbalance (%)"])
                                 for row in range(len(x)):
-                                    # line = str(x[row]) + "," + str(y[row])
+                                    # line = str(x[row])+ "," + str(y[row])
                                     w.writerow([str(x[row]), str(y[row])])
     
                         # print DSScircuit.Losses
@@ -2332,41 +2640,39 @@ class QGISrunOpenDSS(object):
                         DSScircuit.Monitors.ResetAll()
                     
                     # voltage profile plot
-                    self.GraphSnapshotVoltages( V_buses )
+                    self.GraphSnapshotVoltages(V_buses)
                     DSSprogress.PctProgress = 100
                     DSSprogress.Close()
-                    
-                    
     
-                    tfinal_snapshot = time.time() - tinitial_snapshot # snapshot total time
-                    if not self.dlg.powerflow_daily.isChecked() and not self.dlg.short_circuit.isChecked() \
+                    tfinal_snapshot = time.time()- tinitial_snapshot # snapshot total time
+                    if not self.dlg.powerflow_daily.isChecked() and not self.dlg.short_circuit.isChecked()\
                             and not self.dlg.harmonics.isChecked() and not self.dlg.powerflow_yearly.isChecked():
                         QMessageBox.information(None,
                                                 QCoreApplication.translate('dialog', "Simulacion Instantanea Terminada"),
-                                                QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
-                                                    tfinal_snapshot + time_common_for_all) + " s" + "\n" + \
+                                                QCoreApplication.translate('dialog', "Tiempo de simulacion: ")+ str(
+                                                    tfinal_snapshot + time_common_for_all)+ " s" + "\n" + \
                                                 QCoreApplication.translate('dialog',
-                                                                           "Los archivos han sido guardados en: ") + output_folder)
+                                                                           "Los archivos han sido guardados en: ")+ output_folder)
                     
-                    with open(dir_network+'\\'+circuit_name+'_LinesMV.dss', 'r+') as the_file:   #save file's original settings
+                    with open(dir_network + '\\' + circuit_name + '_LinesMV.dss', 'r+') as the_file:   #save file's original settings
                         the_file.truncate(0)
                         the_file.writelines(original_lines)
                         the_file.close
                     
                     os.system('clear')
     
-                ###################################################################################
-                #################################      DAILY      #################################
-                ###################################################################################
+                # ##############################################
+                # #############      DAILY      ################
+                # ##############################################
                 # Routine to perform daily power flows
                 if self.dlg.powerflow_daily.isChecked():
                     DSSprogress.Show()
                     DSSprogress.Caption = QCoreApplication.translate('progress', u'Daily')
                     DSSprogress.PctProgress = 0
                     
-                    tinitial_daily = time.time()  # daily time start
-                    dailydate = self.dlg.lineEdit_daily_date.text().upper()  # simulation date
-                    dailydate = correct_date( load_curve_circuit, dailydate )
+                    tinitial_daily = time.time() # daily time start
+                    dailydate = self.dlg.lineEdit_daily_date.text().upper() # simulation date
+                    dailydate = correct_date(load_curve_circuit, dailydate)
                     self.dailydate = dailydate
                     if not dailydate:  # representative day selection routine
                         dailydate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
@@ -2377,56 +2683,17 @@ class QGISrunOpenDSS(object):
                     DQ_to_be_matched = []  # Real Q
                     for ij in range(len(circuit_demand)):
                         temp_a = circuit_demand[ij][0]
-                        if str(temp_a.replace('/', '')) == str(dailydate.replace('/', '')):
+                        if str(temp_a.replace('/', ''))== str(dailydate.replace('/', '')):
                             DP_to_be_matched.append(circuit_demand[ij][2])
                             DQ_to_be_matched.append(circuit_demand[ij][3])
                             
-                    if self.substation_sel == True:
-                        
+                    if self.substation_sel is True:
                         circuit_name = name_file_created.split('_')[0]
-                        firstLine = 'MV3P'+circuit_name+'00'
+                        firstLine = 'MV3P' + circuit_name + '00'
+                     # #### FIRST SIMULATION: SNAPSHOT TO GET LN VOLTAGE BASES
+                    Base_V = self.simulation_to_get_bases(dir_network, firstLine, DSStext, DSScircuit)
                     
-                    ######## FIRST SIMULATION: SNAPSHOT TO GET LN VOLTAGE BASES
-
-                    DSStext.Command = 'clear'  # clean previous circuits
-                    DSStext.Command = 'New Circuit.Circuito_Distribucion_Daily'
-                    DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
-                    DSStext.Command = 'Set mode=snapshot'  # Type of Simulation
-                    # DSStext.Command = 'Set number=1'  # Number of steps to be simulated
-                    # DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s)
-                    DSStext.Command = 'Set time=(0,0)'  # Set the start simulation time                
-                    DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the first line to monitor P and Q
-                    DSStext.Command = 'batchedit load..* enabled = no' # No load simulation
-                    DSStext.Command = 'batchedit storage..* enabled = no' # No load simulation
-                    DSStext.Command = 'batchedit PVSystem..* enabled = no' # No load simulation
-                    DSStext.Command = 'batchedit Generator..* enabled = no' # No load simulation
-                    
-                    DSScircuit.Solution.Solve()  # solve the circuit
-                    
-                    
-                    all_buses = list(DSScircuit.AllBusVmag)
-                    index = list(DSScircuit.AllNodeNames)
-                    tam_buses = len(all_buses)
-                    #borrar datos innecesarios
-                    del_bus = []
-                        
-                    for i in range(len(index)):
-                        if 'AFTERMETER' in str(index[i]).upper():
-                            del_bus.append(i)
-                    
-                    num_del_buses = len(del_bus)
-                    
-                    for j in range(num_del_buses-1,-1,-1):
-                        index.remove(index[del_bus[j]])
-                        all_buses.remove(all_buses[del_bus[j]])
-                        
-                    Base_V = pandas.DataFrame(0, index = index, columns=['base'])
-                    base_vals = [120, 138, 208, 240, 254, 277, 416, 440, 480, 7620, 7967, 13200, 13800, 14380, 19920, 24900, 34500, 79670, 132790]
-                    
-                    for i in range(len(all_buses)):
-                        busV = all_buses[i]
-                        Base_V['base'].iloc[i] = base_vals[[abs(val-busV) for val in base_vals].index(min([abs(val-busV) for val in base_vals]))] #selecciona el index que de la mínima resta
-                    #End get voltage bases
+                    # Second simulation
     
                     DSStext.Command = 'clear'  # clean previous circuits
                     DSStext.Command = 'New Circuit.Circuito_Distribucion_Daily'  # create a new circuit
@@ -2445,15 +2712,16 @@ class QGISrunOpenDSS(object):
                     gen_rpowers = np.zeros(96)
                     GenNames = DSScircuit.Generators.AllNames
                     PVNames = DSScircuit.PVSystems.AllNames
-                    
+                    loadsNames = DSScircuit.Loads.AllNames
+                    print("len(loadsNames) 1 = ", len(loadsNames))
                     monitor_data = []
     
                     # solver for-loop
                     for t in range(96):
-                        gen_p = 0
-                        gen_q = 0
                         DSScircuit.Solution.Solve()
                         if GenNames[0] != 'NONE':
+                            gen_p = 0
+                            gen_q = 0
                             for i in GenNames:  # extract power from existing generators
                                 DSScircuit.setActiveElement('generator.' + i)
                                 p = DSScircuit.ActiveElement.Powers
@@ -2463,19 +2731,39 @@ class QGISrunOpenDSS(object):
                             gen_powers[t] += gen_p
                             gen_rpowers[t] += gen_q
                         if PVNames[0] != 'NONE':
+                            pv_p = 0
+                            pv_q = 0
                             for i in PVNames:  # extract power from existing PVSystems
                                 DSScircuit.setActiveElement('PVSystem.' + i)
                                 p = DSScircuit.ActiveElement.Powers
                                 for w in range(0, len(p), 2):
-                                    gen_p += -p[w]
-                                    gen_q += -p[w + 1]
-                            gen_powers[t] += gen_p
-                            gen_rpowers[t] += gen_q
+                                    pv_p += -p[w]
+                                    pv_q += -p[w + 1]
+                            gen_powers[t] += pv_p
+                            gen_rpowers[t] += pv_q
+                        """
+                        # Cargas AMI
+                        if loadsNames[0] != 'NONE':
+                            ami_p = 0
+                            ami_q = 0
+                            for i in loadsNames:  # extract power from existing loads
+                                if "_a" not in str(i):
+                                    continue
+                                DSScircuit.setActiveElement('load.' + i)
+                                p = DSScircuit.ActiveElement.Powers
+                                for w in range(0, len(p), 2):
+                                    ami_p += -p[w]
+                                    ami_q += -p[w+1]
+                            print("i = ", t, " P = ", ami_p, " Q = ", ami_q)
+                            
+                            gen_powers[t] += ami_p
+                            gen_rpowers[t] += ami_q
+                    """
     
                     DSSprogress.PctProgress = 20
                     errorP = 0.003  # Maximum desired correction error for active power
                     errorQ = 0.01  # Maximum desired correction error for reactive power
-                    max_it_correction = 15  # Maximum number of allowed iterations
+                    max_it_correction = 100  # Maximum number of allowed iterations
                     study = 'daily'  # Study type for PQ_corrector
                     #DSStext.Command = 'batchedit storage..* enabled = no' # No storage simulation
     
@@ -2492,7 +2780,7 @@ class QGISrunOpenDSS(object):
                         return
                     if DSScircuit == None or DSScircuit == 0:
                         self.iface.messageBar().pushCritical("QGISRunOpenDSS", QCoreApplication.translate('dialog',
-                                                                                                   u'Sucedió un error crítico y no fue posible completar la operación'))  
+                                                                                                   u'Hubo un error no fue posible completar la operación')) 
                         return
                     
                     DSSprogress.PctProgress = 50
@@ -2503,8 +2791,8 @@ class QGISrunOpenDSS(object):
                     DSStext.Command = 'clear'  # clean previous circuits
                     DSStext.Command = 'New Circuit.Circuito_Distribucion_Daily'  # create a new circuit
                     DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # master file compilation
-                    if plantel == True: #se agregan los buses si hay un archivo del plantel de buses
-                        DSStext.Command = 'redirect ' + str(name_file_created.split('_')[0]) +  '_StorageBuses.dss'
+                    if plantel is True: #se agregan los buses si hay un archivo del plantel de buses
+                        DSStext.Command = 'redirect ' + str(name_file_created.split('_')[0])+  '_StorageBuses.dss'
                     DSStext.Command = 'Set mode = daily'  # daily simulation mode
                     DSStext.Command = 'Set number= 1'  ## steps by solve
                     DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s
@@ -2553,45 +2841,45 @@ class QGISrunOpenDSS(object):
                     
                     ############################################
                     for t in range(96):                    
-                        DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[t])  # set kW corrector
-                        DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[t])  # set kVAr corrector
+                        DSStext.Command = 'batchedit load.n_.* kW=' + str(kW_sim[t]) # set kW corrector
+                        DSStext.Command = 'batchedit load.n_.* kVAr=' + str(kVAr_sim[t]) # set kVAr corrector
                         
                         update_storage(DSScircuit, vector_soc_t, t)
-                        DSScircuit.Solution.Solve()  # solve the circuit
+                        DSScircuit.Solution.Solve() # solve the circuit
                         
                         ########################################################
                         all_buses = list(DSScircuit.AllBusVmag)
                         index = list(DSScircuit.AllNodeNames)
                         #eliminar los buses creados por el energy meter
-                        del_bus = []
-                        
+                        index_list = []
+                        all_buses_list = []
                         for i in range(len(index)):
-                            if 'AFTERMETER' in str(index[i]).upper():
-                                del_bus.append(i)
-                        
-                        num_del_buses = len(del_bus)
-                        
-                        for j in range(num_del_buses-1,-1,-1):
-                            index.remove(index[del_bus[j]])
-                            all_buses.remove(all_buses[del_bus[j]])
+                            dato = str(index[i]).upper()
+                            if 'AFTERMETER' not in dato:
+                                all_buses_list.append(all_buses[i])
+                                index_list.append(index[i])
+                                
+                        all_buses = all_buses_list
 
                         ###########################################################
                         
                         if t == 0:  # set pu voltages
-                            DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
-                            DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
-                            V_buses = pandas.DataFrame(np.nan, index = index, columns=[x for x in range(96)])  
+                            if self.lv_lines is True:
+                                DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
+                            if self.mv_lines is True:
+                                DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
+                            V_buses = pandas.DataFrame(np.nan, index=index_list, columns=[x for x in range(96)]) 
                         
                         v_allbuses = np.array(all_buses)
                         v_base = np.array(Base_V['base'])
-                        
-                        if len(v_allbuses) != len(v_base):
+                        if len(v_allbuses)!= len(v_base):
                             QMessageBox.critical(None, QCoreApplication.translate('dialog', "Error"), QCoreApplication.translate('dialog',
                                                                                                    u'Verifique que todas las cargas estén conectadas correctamente a las líneas.\nNota: confirme que las cargas estén conectadas a las fases adecuadas. '))
                             DSSprogress.Close()
                             return
                            
-                        V_buses[t] = np.divide(v_allbuses, v_base) #to create a chart of the voltages of all the circuit 
+                        V_buses[t] = np.divide(v_allbuses, v_base)#to create a chart of the voltages of all the circuit 
+                        V_buses_write = V_buses.to_dict()
                         ############################################
                         
                         DSScircuit.setActiveElement('line.' + firstLine)
@@ -2611,12 +2899,12 @@ class QGISrunOpenDSS(object):
                             nodeNames_ph2 = DSScircuit.AllNodeNamesByPhase(2)
                             nodeNames_ph3 = DSScircuit.AllNodeNamesByPhase(3)
                             lineNames = DSScircuit.Lines.allnames  # all lines names
-                            normalAmpsDic = auxfcns.normalAmps(DSScircuit, lineNames)  # all lines ampacities
-                        nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)])  # Buses pu voltages ph1
-                        nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)])  # Buses pu voltages ph2
-                        nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)])  # Buses pu voltages ph3
+                            normalAmpsDic = auxfcns.normalAmps(DSScircuit, lineNames) # all lines ampacities
+                        nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)]) # Buses pu voltages ph1
+                        nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)]) # Buses pu voltages ph2
+                        nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)]) # Buses pu voltages ph3
                         
-                        currentList.append( auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic, study))  ##Normalized currents
+                        currentList.append(auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic, study)) ##Normalized currents
                     
                     
                     #####################################
@@ -2629,14 +2917,14 @@ class QGISrunOpenDSS(object):
                     import pandas as pd
                     name_file = "potencia_" + monitor_name + ".csv"
                     output_file = self.output_folder + "\\" + name_file
-                    pd.DataFrame( monitor_data ).to_csv( output_file )
+                    pd.DataFrame(monitor_data).to_csv(output_file)
                     
                     for i in range(34):
                         monitor_name = "mon_plant_ruta51_" + str(i)
                         name_file = "potencia_" + monitor_name + ".csv"
                         monitor_data = auxfcns.ExtractMonitorData(DSScircuit, monitor_name, [1, 3, 5], 1)
                         output_file = self.output_folder + "\\" + name_file
-                        pd.DataFrame( monitor_data ).to_csv( output_file )
+                        pd.DataFrame(monitor_data).to_csv(output_file)
                     """
                         
                     
@@ -2645,25 +2933,26 @@ class QGISrunOpenDSS(object):
                     busesDict = auxfcns.ReadBusVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nodeNames_ph1, nodeNames_ph2, nodeNames_ph3)
                     
                     #Se determina el número de sobrecargas de los trafos y problemas de tensión en casas
-                    n_sobrecargas, lista_sobrecargas = self.overload_trafos( trafosDict )
-                    n_casas_con_problemas, list_DSSNameBuseswithProblems = self.GetVoltageProblems( busesDict )
+                    n_sobrecargas, lista_sobrecargas = self.overload_trafos(trafosDict)
+                    n_casas_con_problemas, list_DSSNameBuseswithProblems = self.GetVoltageProblems(busesDict)
     
                     # Results shapes update
                     if self.dlg.checkBox_capas.isChecked():
-                        list_layersTrafos, list_layersLinesMV, list_layersLinesLV = auxfcns.get_layersnames( self.name_output_azul )
-                        auxfcns.lineCurrentsResults(self, lineNames, currentList, study, list_layersLinesMV, list_layersLinesLV)  # currents shape
+                        list_layersTrafos, list_layersLinesMV, list_layersLinesLV = auxfcns.get_layersnames(self.name_output_azul)
+                        auxfcns.lineCurrentsResults(self, lineNames, currentList, study, list_layersLinesMV, list_layersLinesLV) # currents shape
                         DSSprogress.PctProgress = 80
                         auxfcns.WriteTrafosLoad(self, trafosDict, trafosNames, study, list_layersTrafos)
                         auxfcns.WriteBusVolts(self, busesDict, name_file_created, study)
                         DSSprogress.PctProgress = 90
     
                     # Aparent power calculation
-                    S_sim = np.sqrt(np.power(temp_powersP, 2) + np.power(temp_powersQ, 2))
+                    S_sim = np.sqrt(np.power(temp_powersP, 2)+ np.power(temp_powersQ, 2))
                     SabcMC.append(S_sim)
                     # P, Q and S from substation curve
-                    P_real = [float(x) for x in DP_to_be_matched]
-                    Q_real = [float(x) for x in DQ_to_be_matched]
-                    S_real = np.sqrt(np.power(P_real, 2) + np.power(Q_real, 2))
+                    P_real = [float(x)for x in DP_to_be_matched]
+                    print("P_real = ", P_real)
+                    Q_real = [float(x)for x in DQ_to_be_matched]
+                    S_real = np.sqrt(np.power(P_real, 2)+ np.power(Q_real, 2))
                     # results output path
                     final_output_folder = output_folder + '/Daily/'
                     if not os.path.exists(final_output_folder):
@@ -2709,69 +2998,69 @@ class QGISrunOpenDSS(object):
                         if self.dlg.checkBoxLosses.isChecked():
                             fig4 = plt.figure(4)
                             ax = plt.gca()
-                            ELP = np.round(np.sum(lossesWList) * .25, 2)
-                            ax.plot(hours, lossesWList, label=str(ELP) + ' kWh')
+                            ELP = np.round(np.sum(lossesWList)* .25, 2)
+                            ax.plot(hours, lossesWList, label=str(ELP)+ ' kWh')
                             ax.xaxis.set_major_formatter(fmtr)
                             ax.set_xlabel(QCoreApplication.translate('graphs', u'Hora'))
                             ax.set_title(QCoreApplication.translate('graphs', u'Pérdidas Reales'))
                             # fig4 = plt.figure(4)
-                            # ELQ = np.round(np.sum(lossesQList) * .25,2)
-                            # plt.plot(lossesQList, label=QCoreApplication.translate('graphs', u'Reactiva [kVAr], ') + str(ELQ) + ' kVArh')
+                            # ELQ = np.round(np.sum(lossesQList)* .25,2)
+                            # plt.plot(lossesQList, label=QCoreApplication.translate('graphs', u'Reactiva [kVAr], ')+ str(ELQ)+ ' kVArh')
                             DSScircuit.Monitors.ResetAll()
     
                     DSSprogress.PctProgress = 100
                     # aparent power graph
                     plt.figure(1)
-                    plt.xticks(np.arange(min(hours), max(hours) + 0.04166666663 * 2, 0.04167 * 3))
-                    plt.xlim([hours[0], hours[len(hours) - 1]])
+                    plt.xticks(np.arange(min(hours), max(hours)+ 0.04166666663 * 2, 0.04167 * 3))
+                    plt.xlim([hours[0], hours[len(hours)- 1]])
                     # plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
-                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Aparente [kVA]'))  # 'Aparent Power [kVA]'
+                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Aparente [kVA]')) # 'Aparent Power [kVA]'
                     plt.tight_layout()
                     plt.legend(fontsize=8, loc=2)
                     mng = plt.get_current_fig_manager()
-                    mng.window.showMaximized() 
+                    mng.window.showMaximized()
                     #fig1.show()
                     # real power graph
                     plt.figure(2)
-                    plt.xticks(np.arange(min(hours), max(hours) + 0.04166666663 * 2, 0.04167 * 3))
-                    plt.xlim([hours[0], hours[len(hours) - 1]])
+                    plt.xticks(np.arange(min(hours), max(hours)+ 0.04166666663 * 2, 0.04167 * 3))
+                    plt.xlim([hours[0], hours[len(hours)- 1]])
                     # plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
-                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Activa [kW]'))  # 'Active Power [kW]'
+                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Activa [kW]')) # 'Active Power [kW]'
                     plt.tight_layout()
                     plt.legend(fontsize=8, loc=2)
                     mng = plt.get_current_fig_manager()
-                    mng.window.showMaximized() 
+                    mng.window.showMaximized()
                     #fig2.show()
                     # reactive power graph
                     plt.figure(3)
-                    plt.xticks(np.arange(min(hours), max(hours) + 0.04166666663 * 2, 0.04167 * 3))
-                    plt.xlim([hours[0], hours[len(hours) - 1]])
+                    plt.xticks(np.arange(min(hours), max(hours)+ 0.04166666663 * 2, 0.04167 * 3))
+                    plt.xlim([hours[0], hours[len(hours)- 1]])
                     # plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
-                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Reactiva [kVAr]'))  # 'Reactive Power [kVAr]'
+                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Reactiva [kVAr]')) # 'Reactive Power [kVAr]'
                     plt.tight_layout()
                     plt.legend(fontsize=8, loc=2)
                     #fig3.show()
                     mng = plt.get_current_fig_manager()
-                    mng.window.showMaximized() 
+                    mng.window.showMaximized()
     
                     # losses graph
                     if self.dlg.checkBoxLosses.isChecked():
                         plt.figure(4)
-                        plt.xticks(np.arange(min(hours), max(hours) + 0.04166666663 * 2, 0.04167 * 3))
-                        plt.xlim([hours[0], hours[len(hours) - 1]])
+                        plt.xticks(np.arange(min(hours), max(hours)+ 0.04166666663 * 2, 0.04167 * 3))
+                        plt.xlim([hours[0], hours[len(hours)- 1]])
                         # plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
                         plt.ylabel(
-                            QCoreApplication.translate('graphs', u'Pérdidas Activas [kW]'))  # 'Reactive Power [kVAr]'
+                            QCoreApplication.translate('graphs', u'Pérdidas Activas [kW]')) # 'Reactive Power [kVAr]'
                         plt.tight_layout()
                         plt.legend(fontsize=8, loc=2)
                         mng = plt.get_current_fig_manager()
-                        mng.window.showMaximized() 
+                        mng.window.showMaximized()
                         #fig4.show()
                         fig4.savefig(final_output_folder + '/' + network + '_Losses_' + str_time + '.pdf',
                                      format='pdf',
                                      dpi=6000)
                         csvFile = final_output_folder + '/' + network + '_Losses_' + str_time + '.csv'
-                        with open(csvFile, 'w') as f:
+                        with open(csvFile, 'w')as f:
                             w = csv.writer(f, lineterminator='\n')
                             #w.writerow(["Losses (kW)"])
                             for row in lossesWList:
@@ -2782,10 +3071,10 @@ class QGISrunOpenDSS(object):
                     if self.dlg.checkBoxUnbalance.isChecked():
                         x, y = list(zip(*list(orderedUnbalance.items())))
                         x_labels = []  # create an empty list to store the labels
-                        if len(x) <= 7:
+                        if len(x)<= 7:
                             steps = 1
                         else:
-                            steps = len(x) / 7
+                            steps = len(x)/ 7
                         ticksIndex = np.arange(start = 0, stop = len(x), step = steps, dtype = int)
                         for key in ticksIndex:  # buses names for graph's ticks
                             x_labels.append(x[key])
@@ -2804,17 +3093,17 @@ class QGISrunOpenDSS(object):
                         plt.title(QCoreApplication.translate('graphs', u'Desbalance de tensión'))
                         plt.tight_layout()
                         mng = plt.get_current_fig_manager()
-                        mng.window.showMaximized() 
+                        mng.window.showMaximized()
                         #fig5.show()
                         fig5.savefig(final_output_folder + '/' + network + '_Unbalance_' + str_time + '.pdf',
                                      format='pdf',
                                      dpi=6000)
                         csvFile = final_output_folder + '/' + network + '_Unbalance_' + str_time + '.csv'
-                        with open(csvFile, 'w') as f:
+                        with open(csvFile, 'w')as f:
                             w = csv.writer(f, lineterminator='\n')
                             w.writerow(["Bus", "Unbalance (%)"])
                             for row in range(len(x)):
-                                #line = str(x[row]) + "," + str(y[row])
+                                #line = str(x[row])+ "," + str(y[row])
                                 w.writerow([str(x[row]), str(y[row])])
                     # real power figure creation
                     fig2.savefig(final_output_folder + '/' + network + '_MC_Result_plot_' + str_time + '.pdf', format='pdf',
@@ -2832,35 +3121,35 @@ class QGISrunOpenDSS(object):
                 
                     #Se llama a la función que grafica las tensiones de los buses
                     self.GraphDailyVoltages(DSScircuit, V_buses)
-                    tfinal_daily = time.time() - tinitial_daily
+                    tfinal_daily = time.time()- tinitial_daily
                     DSSprogress.Close()
                     
                     
-                    if not self.dlg.powerflow_snapshot.isChecked() and not self.dlg.short_circuit.isChecked() \
-                            and not self.dlg.harmonics.isChecked() and not self.dlg.powerflow_yearly.isChecked():
+                    if not self.dlg.powerflow_snapshot.isChecked()and not self.dlg.short_circuit.isChecked()\
+                            and not self.dlg.harmonics.isChecked()and not self.dlg.powerflow_yearly.isChecked():
                         QMessageBox.information(None, QCoreApplication.translate('dialog', "Simulacion Diaria Terminada"), \
-                                                QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
-                                                    tfinal_daily + time_common_for_all) + " s" + "\n" + \
+                                                QCoreApplication.translate('dialog', "Tiempo de simulacion: ")+ str(
+                                                    tfinal_daily + time_common_for_all)+ " s" + "\n" + \
                                                 QCoreApplication.translate('dialog',
-                                                                           "Los archivos han sido guardados en: ") + output_folder)
+                                                                           "Los archivos han sido guardados en: ")+ output_folder)
                                                                            
-                    with open(dir_network+'\\'+circuit_name+'_LinesMV.dss', 'r+') as the_file:   #save file's original settings
+                    with open(dir_network + '\\' + circuit_name + '_LinesMV.dss', 'r+') as the_file:   #save file's original settings
                         the_file.truncate(0)
                         the_file.writelines(original_lines)
                         the_file.close
                         
                     os.system('clear')
     
-                ###################################################################################
-                #################################      YEARLY      ################################
-                ###################################################################################
+                # ##############################################
+                # #############     YEARLY      ################
+                # ##############################################
                 # yearly power flow simulation routine
                 if self.dlg.powerflow_yearly.isChecked():
                     self.progress.show()
                     self.progress.progressBar.setValue(0)
     
-                    tinitial_yearly = time.time() # yearly simulation init time
-                    yearly_resolution = self.dlg.lineEdit_yearly.text().upper() # yearly simulation resolution
+                    tinitial_yearly = time.time()# yearly simulation init time
+                    yearly_resolution = self.dlg.lineEdit_yearly.text().upper()# yearly simulation resolution
                     if not yearly_resolution:  # default: 1h
                         yearly_resolution = '1'
     
@@ -2874,14 +3163,14 @@ class QGISrunOpenDSS(object):
                     SabcMC = []
                     DP_to_be_matched = []
                     DQ_to_be_matched = []
-                    steps = 4 * int(yearly_resolution)  # *4 because substation info have 15min steps
+                    steps = 4 * int(yearly_resolution) # *4 because substation info have 15min steps
                     for i in range(1, len(circuit_demand), steps):
                         temp_a = circuit_demand[i][0]
                         DP_to_be_matched.append(circuit_demand[i][2])
                         DQ_to_be_matched.append(circuit_demand[i][3])
     
                     DSSprogress.PctProgress = 5
-                    self.progress.progressBar.setRange(0, (35040 / steps) + 100)
+                    self.progress.progressBar.setRange(0, (35040 / steps)+ 100)
                     DSStext.Command = 'clear' # clean previous circuits
                     DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot' # create a new circuit
                     DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
@@ -2894,13 +3183,13 @@ class QGISrunOpenDSS(object):
                         DSStext.Command = line_tx_definition
     
                     # generators powers arrays
-                    gen_powers = np.zeros( int(35040 / steps) )
-                    gen_rpowers = np.zeros( int(35040 / steps) )
+                    gen_powers = np.zeros(int(35040 / steps))
+                    gen_rpowers = np.zeros(int(35040 / steps))
                     GenNames = DSScircuit.Generators.AllNames
                     PVNames = DSScircuit.PVSystems.AllNames
                                    
     
-                    for t in range( int(35040 / steps) ):
+                    for t in range(int(35040 / steps)):
                         gen_p = 0
                         gen_q = 0
                         DSScircuit.Solution.Solve()
@@ -2922,6 +3211,20 @@ class QGISrunOpenDSS(object):
                                     gen_q += -p[w + 1]
                             gen_powers[t] += gen_p
                             gen_rpowers[t] += gen_q
+                        """
+                        # Cargas AMI
+                        if loadsNames[0] != 'NONE':
+                            for i in loadsNames:  # extract power from existing loads
+                                if "_a" not in str(i):
+                                    continue
+                                DSScircuit.setActiveElement('load.' + i)
+                                p = DSScircuit.ActiveElement.Powers
+                                for w in range(0, len(p), 2):
+                                    gen_p += -p[w]
+                                    gen_q += -p[w+1]
+                            gen_powers[t] += gen_p
+                            gen_rpowers[t] += gen_q
+                        """
     
                     DSSprogress.PctProgress = 20
                     self.progress.progressBar.setValue(100)
@@ -2931,7 +3234,6 @@ class QGISrunOpenDSS(object):
                     max_it_correction = 100  # Maximum number of allowed iterations
                     study = 'yearly'  # Study type for PQ_corrector
                     #DSStext.Command = 'batchedit storage..* enabled = no' # No storage simulation
-                    
     
                     # load allocation algorithm
                     [DSScircuit, errorP_i, errorQ_i, temp_powersP, temp_powersQ, kW_sim,
@@ -2946,7 +3248,7 @@ class QGISrunOpenDSS(object):
                         return
                     if DSScircuit == None:
                         self.iface.messageBar().pushCritical("QGIS2RunOpenDSS", QCoreApplication.translate('dialog',
-                                                                                                   u'Sucedió un error grave y no fue posible completar la operación'))  
+                                                                                                   u'Sucedió un error grave y no fue posible completar la operación')) 
                         DSSprogress.Close()
                         return
             
@@ -2958,9 +3260,9 @@ class QGISrunOpenDSS(object):
                     DSStext.Command = 'clear'  # clean previous circuits
                     DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'  # create a new circuit
                     DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
-                    if plantel == True: #se agregan los buses si existe el plantel de buses
-                        DSStext.Command = 'redirect ' + str(name_file_created.split('_')[0]) +  '_StorageBuses.dss'
-                    print( str(name_file_created.split('_')[0] +  '_StorageBuses.dss' ), " yearly" )
+                    if plantel is True: #se agregan los buses si existe el plantel de buses
+                        DSStext.Command = 'redirect ' + str(name_file_created.split('_')[0])+  '_StorageBuses.dss'
+                    print(str(name_file_created.split('_')[0] +  '_StorageBuses.dss'), " yearly")
                     DSStext.Command = 'Set mode=yearly'  # Type of Simulation
                     DSStext.Command = 'Set number=1'  # Number of steps to be simulated
                     DSStext.Command = 'Set h=' + yearly_resolution + 'h'  # simulation resolution, in hours
@@ -3002,8 +3304,8 @@ class QGISrunOpenDSS(object):
     
                     for t in range(35040 / steps):
                         self.progress.progressBar.setValue(100 + t)
-                        DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[t])  # kW corrector
-                        DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[t])  # kVAr corrector
+                        DSStext.Command = 'batchedit load.n_.* kW=' + str(kW_sim[t]) # kW corrector
+                        DSStext.Command = 'batchedit load.n_.* kVAr=' + str(kVAr_sim[t]) # kVAr corrector
                         DSScircuit.Solution.Solve()
                         DSScircuit.setActiveElement('line.' + firstLine)
                         temp_powers = DSScircuit.ActiveElement.Powers  # circuit powers at instant t
@@ -3018,12 +3320,12 @@ class QGISrunOpenDSS(object):
                             orderedUnbalance = auxfcns.unbalance(self, DSScircuit, buses, unbalance, orderedUnbalance)
                     DSSprogress.PctProgress = 80
                     # aparent power calc
-                    S_sim = np.sqrt(np.power(temp_powersP, 2) + np.power(temp_powersQ, 2))
+                    S_sim = np.sqrt(np.power(temp_powersP, 2)+ np.power(temp_powersQ, 2))
                     SabcMC.append(S_sim)
     
-                    P_real = [float(x) for x in DP_to_be_matched]
-                    Q_real = [float(x) for x in DQ_to_be_matched]
-                    S_real = np.sqrt(np.power(P_real, 2) + np.power(Q_real, 2))
+                    P_real = [float(x)for x in DP_to_be_matched]
+                    Q_real = [float(x)for x in DQ_to_be_matched]
+                    S_real = np.sqrt(np.power(P_real, 2)+ np.power(Q_real, 2))
     
                     # Run Monte Carlo Simulations
                     for MC_iteration in range(int(number_simulations)):
@@ -3052,13 +3354,13 @@ class QGISrunOpenDSS(object):
                         # losses graph init
                         if self.dlg.checkBoxLosses.isChecked():
                             fig4 = plt.figure(4)
-                            ELP = np.round(np.sum(lossesWList) * int(yearly_resolution), 2)
+                            ELP = np.round(np.sum(lossesWList)* int(yearly_resolution), 2)
                             plt.plot(lossesWList,
-                                     label=str(ELP) + ' kWh')
+                                     label=str(ELP)+ ' kWh')
                             plt.title(QCoreApplication.translate('graphs', u'Pérdidas Reales'))
                             # fig4 = plt.figure(4)
-                            # ELQ = np.round(np.sum(lossesQList) * int(yearly_resolution),2)
-                            # plt.plot(lossesQList, label=QCoreApplication.translate('graphs', u'Reactiva [kVAr], ') + str(ELQ) + ' kVArh')
+                            # ELQ = np.round(np.sum(lossesQList)* int(yearly_resolution),2)
+                            # plt.plot(lossesQList, label=QCoreApplication.translate('graphs', u'Reactiva [kVAr], ')+ str(ELQ)+ ' kVArh')
                             DSScircuit.Monitors.ResetAll()
     
                     DSSprogress.PctProgress = 90
@@ -3067,31 +3369,31 @@ class QGISrunOpenDSS(object):
                     plt.figure(1)
                     plt.xlim([0, 35040 / steps])
                     plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
-                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Aparente [kVA]'))  # 'Aparent Power [kVA]'
+                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Aparente [kVA]')) # 'Aparent Power [kVA]'
                     plt.tight_layout()
                     plt.legend(fontsize=8, loc=2)
                     #fig1.show()
                     mng = plt.get_current_fig_manager()
-                    mng.window.showMaximized() 
+                    mng.window.showMaximized()
                     # real power graph
                     plt.figure(2)
                     plt.xlim([0, 35040 / steps])
                     plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
-                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Activa [kW]'))  # 'Active Power [kW]'
+                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Activa [kW]')) # 'Active Power [kW]'
                     plt.tight_layout()
                     plt.legend(fontsize=8, loc=2)
                     #fig2.show()
                     mng = plt.get_current_fig_manager()
-                    mng.window.showMaximized() 
+                    mng.window.showMaximized()
                     # reactive power graph
                     plt.figure(3)
                     plt.xlim([0, 35040 / steps])
                     plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
-                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Reactiva [kVAr]'))  # 'Reactive Power [kVAr]'
+                    plt.ylabel(QCoreApplication.translate('graphs', u'Potencia Reactiva [kVAr]')) # 'Reactive Power [kVAr]'
                     plt.tight_layout()
                     plt.legend(fontsize=8, loc=2)
                     mng = plt.get_current_fig_manager()
-                    mng.window.showMaximized() 
+                    mng.window.showMaximized()
                     #fig3.show()
                     # results final path
                     final_output_folder = output_folder + '/Yearly/'
@@ -3103,11 +3405,11 @@ class QGISrunOpenDSS(object):
                         plt.xlim([0, 96])
                         plt.xlabel(QCoreApplication.translate('graphs', u'Tiempo'))
                         plt.ylabel(
-                            QCoreApplication.translate('graphs', u'Pérdidas Activas [kW]'))  # 'Reactive Power [kVAr]'
+                            QCoreApplication.translate('graphs', u'Pérdidas Activas [kW]')) # 'Reactive Power [kVAr]'
                         plt.tight_layout()
                         plt.legend(fontsize=8, loc=2)
                         mng = plt.get_current_fig_manager()
-                        mng.window.showMaximized() 
+                        mng.window.showMaximized()
                         #fig4.show()
                         fig4.savefig(final_output_folder + '/' + network + '_Losses_' + str_time + '.pdf',
                                      format='pdf',
@@ -3117,7 +3419,7 @@ class QGISrunOpenDSS(object):
                     if self.dlg.checkBoxUnbalance.isChecked():
                         x, y = list(zip(*list(orderedUnbalance.items())))
                         x_labels = []  # create an empty list to store the labels
-                        ticksIndex = np.arange(0, len(x), len(x) / 7, int)
+                        ticksIndex = np.arange(0, len(x), len(x)/ 7, int)
                         for key in ticksIndex:  # buses names for graph ticks
                             x_labels.append(x[key])
                         fig5 = plt.figure(5)
@@ -3132,17 +3434,17 @@ class QGISrunOpenDSS(object):
                         plt.legend(fontsize=8, loc=2)
                         plt.tight_layout()
                         mng = plt.get_current_fig_manager()
-                        mng.window.showMaximized() 
+                        mng.window.showMaximized()
                         #fig5.show()
                         fig5.savefig(final_output_folder + '/' + network + '_Unbalance_' + str_time + '.pdf',
                                      format='pdf',
                                      dpi=6000)
                         csvFile = final_output_folder + '/' + network + '_Unbalance_' + str_time + '.csv'
-                        with open(csvFile, 'w') as f:  # write csv file
+                        with open(csvFile, 'w')as f:  # write csv file
                             w = csv.writer(f, lineterminator='\n')
                             w.writerow(["Bus,Unbalance (%)"])
                             for row in range(len(x)):
-                                line = str(x[row]) + "," + str(y[row])
+                                line = str(x[row])+ "," + str(y[row])
                                 w.writerow([line])
                     DSSprogress.PctProgress = 100
                     # real power figure creation
@@ -3151,7 +3453,7 @@ class QGISrunOpenDSS(object):
     
                     # powers: csv file creation
                     csvFile = final_output_folder + '/' + network + '_Powers_' + str_time + '.csv'
-                    with open(csvFile, 'w') as f:
+                    with open(csvFile, 'w')as f:
                         w = csv.writer(f, lineterminator='\n')
                         w.writerow(["P (kW)", "Q (kVAr)"])
                         for row in range(35040 / steps):
@@ -3160,19 +3462,19 @@ class QGISrunOpenDSS(object):
                             w.writerow([lineP, lineQ])
                     DSSprogress.Close()
                     self.progress.show()
-                    tfinal_yearly = time.time() - tinitial_yearly  # yearly simulation end time
-                    if not self.dlg.powerflow_snapshot.isChecked() and not self.dlg.powerflow_daily.isChecked() \
-                            and not self.dlg.short_circuit.isChecked() and not self.dlg.harmonics.isChecked():
+                    tfinal_yearly = time.time()- tinitial_yearly  # yearly simulation end time
+                    if not self.dlg.powerflow_snapshot.isChecked()and not self.dlg.powerflow_daily.isChecked()\
+                            and not self.dlg.short_circuit.isChecked()and not self.dlg.harmonics.isChecked():
                         QMessageBox.information(None, QCoreApplication.translate('dialog', "Simulacion Anual Terminada"), \
-                                                QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
-                                                    tfinal_yearly + time_common_for_all) + " s" + "\n" + \
+                                                QCoreApplication.translate('dialog', "Tiempo de simulacion: ")+ str(
+                                                    tfinal_yearly + time_common_for_all)+ " s" + "\n" + \
                                                 QCoreApplication.translate('dialog',
-                                                                           "Los archivos han sido guardados en: ") + output_folder)
+                                                                           "Los archivos han sido guardados en: ")+ output_folder)
                     os.system('clear')
     
-                ###################################################################################
-                #############################      SHORT CIRCUIT      #############################
-                ###################################################################################
+                # ##############################################
+                # #############  SHORT CIRCUIT  ################
+                # ##############################################
                 # short circuit simulation routine
                 if self.dlg.short_circuit.isChecked():
                     tinitial_short_circuit = time.time()
@@ -3183,39 +3485,39 @@ class QGISrunOpenDSS(object):
     
                     # simulation date
                     scdate = self.dlg.lineEdit_sc_date.text().upper()
-                    scdate = correct_date( load_curve_circuit, scdate )
+                    scdate = correct_date(load_curve_circuit, scdate)
                     if not scdate: # if empty: representative day selection
                         scdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
                     # simulation time
-                    sctime = self.dlg.lineEdit_sc_time.text()  # .upper()
-                    sctime = correct_hour( load_curve_circuit, sctime )
+                    sctime = self.dlg.lineEdit_sc_time.text() # .upper()
+                    sctime = correct_hour(load_curve_circuit, sctime)
                     if not sctime:
                         sctime = def_time  # Default is 6pm
     
                     h, m = sctime.split(':')
                     if m is not '00' or '15' or '30' or '45':  # round time to 15min multiples
-                        if int(m) <= 7:
+                        if int(m)<= 7:
                             m = '00'
-                        elif int(m) <= 22:
+                        elif int(m)<= 22:
                             m = '15'
-                        elif int(m) <= 37:
+                        elif int(m)<= 37:
                             m = '30'
-                        elif int(m) <= 52:
+                        elif int(m)<= 52:
                             m = '45'
                         else:
                             m = '00'
-                            h = str(int(h) + 1)
-                            if int(h) == 24:  # last rount stays on 23:45
+                            h = str(int(h)+ 1)
+                            if int(h)== 24:  # last rount stays on 23:45
                                 h = '23'
                                 m = '45'
                     sctime = h + ':' + m
     
-                    daily_strtime = str(scdate.replace('/', '') + sctime.replace(':', ''))
+                    daily_strtime = str(scdate.replace('/', '')+ sctime.replace(':', ''))
                     hora_sec = sctime.split(':')
                     for i in range(len(circuit_demand)):
                         temp_a = circuit_demand[i][0]  # day
                         temp_b = circuit_demand[i][1]  # hour
-                        if str(temp_a.replace('/', '') + temp_b.replace(':', '')) == daily_strtime:
+                        if str(temp_a.replace('/', '')+ temp_b.replace(':', ''))== daily_strtime:
                             P_to_be_matched = circuit_demand[i][2]  # Active power
                             Q_to_be_matched = circuit_demand[i][3]  # Reactive power
     
@@ -3227,37 +3529,37 @@ class QGISrunOpenDSS(object):
                     terminales2 = ''
                     terminales3 = ''
                     short_circuit_phases = '3'
-                    if self.dlg.checkBox_SC_phaseA.isChecked() == True and self.dlg.checkBox_SC_phaseB.isChecked() == True and self.dlg.checkBox_SC_phaseC.isChecked() == True:
+                    if self.dlg.checkBox_SC_phaseA.isChecked() is True and self.dlg.checkBox_SC_phaseB.isChecked() is True and self.dlg.checkBox_SC_phaseC.isChecked() is True:
                         short_circuit_phases = '3'
                         terminales = '.1.2.3'
                         terminales2 = '.0.0.0'
-                        if self.dlg.checkBox_SC_phaseLL.isChecked() == True:  # line to line
+                        if self.dlg.checkBox_SC_phaseLL.isChecked() is True:  # line to line
                             short_circuit_phases = '1'
                             terminales = '.1'
                             terminales2 = '.2'
                             terminales3 = '.3'
                     # SC 2ph
-                    elif self.dlg.checkBox_SC_phaseA.isChecked() == True and self.dlg.checkBox_SC_phaseB.isChecked() == True and self.dlg.checkBox_SC_phaseC.isChecked() == False:
+                    elif self.dlg.checkBox_SC_phaseA.isChecked() is True and self.dlg.checkBox_SC_phaseB.isChecked() is True and self.dlg.checkBox_SC_phaseC.isChecked() is False:
                         short_circuit_phases = '1'
-                        if self.dlg.checkBox_SC_phaseLL.isChecked() == True:  # line to line
+                        if self.dlg.checkBox_SC_phaseLL.isChecked() is True:  # line to line
                             terminales = '.1'
                             terminales2 = '.2'
                         else:  # Line to Ground (LG)
                             short_circuit_phases = '2'
                             terminales = '.1.1'
                             terminales2 = '.2.0'
-                    elif self.dlg.checkBox_SC_phaseA.isChecked() == True and self.dlg.checkBox_SC_phaseB.isChecked() == False and self.dlg.checkBox_SC_phaseC.isChecked() == True:
+                    elif self.dlg.checkBox_SC_phaseA.isChecked() is True and self.dlg.checkBox_SC_phaseB.isChecked() is False and self.dlg.checkBox_SC_phaseC.isChecked() is True:
                         short_circuit_phases = '1'
-                        if self.dlg.checkBox_SC_phaseLL.isChecked() == True:  # line to line
+                        if self.dlg.checkBox_SC_phaseLL.isChecked() is True:  # line to line
                             terminales = '.1'
                             terminales2 = '.3'
                         else:  # LG
                             short_circuit_phases = '2'
                             terminales = '.1.1'
                             terminales2 = '.3.0'
-                    elif self.dlg.checkBox_SC_phaseA.isChecked() == False and self.dlg.checkBox_SC_phaseB.isChecked() == True and self.dlg.checkBox_SC_phaseC.isChecked() == True:
+                    elif self.dlg.checkBox_SC_phaseA.isChecked() is False and self.dlg.checkBox_SC_phaseB.isChecked() is True and self.dlg.checkBox_SC_phaseC.isChecked() is True:
                         short_circuit_phases = '1'
-                        if self.dlg.checkBox_SC_phaseLL.isChecked() == True:  # line to line
+                        if self.dlg.checkBox_SC_phaseLL.isChecked() is True:  # line to line
                             terminales = '.2'
                             terminales2 = '.3'
                         else:  # LG
@@ -3265,15 +3567,15 @@ class QGISrunOpenDSS(object):
                             terminales = '.2.2'
                             terminales2 = '.3.0'
                     # SC 1ph
-                    elif self.dlg.checkBox_SC_phaseA.isChecked() == True and self.dlg.checkBox_SC_phaseB.isChecked() == False and self.dlg.checkBox_SC_phaseC.isChecked() == False:
+                    elif self.dlg.checkBox_SC_phaseA.isChecked() is True and self.dlg.checkBox_SC_phaseB.isChecked() is False and self.dlg.checkBox_SC_phaseC.isChecked() is False:
                         short_circuit_phases = '1'
                         terminales = '.1'
                         terminales2 = '.0'
-                    elif self.dlg.checkBox_SC_phaseA.isChecked() == False and self.dlg.checkBox_SC_phaseB.isChecked() == True and self.dlg.checkBox_SC_phaseC.isChecked() == False:
+                    elif self.dlg.checkBox_SC_phaseA.isChecked() is False and self.dlg.checkBox_SC_phaseB.isChecked() is True and self.dlg.checkBox_SC_phaseC.isChecked() is False:
                         short_circuit_phases = '1'
                         terminales = '.2'
                         terminales2 = '.0'
-                    elif self.dlg.checkBox_SC_phaseA.isChecked() == False and self.dlg.checkBox_SC_phaseB.isChecked() == False and self.dlg.checkBox_SC_phaseC.isChecked() == True:
+                    elif self.dlg.checkBox_SC_phaseA.isChecked() is False and self.dlg.checkBox_SC_phaseB.isChecked() is False and self.dlg.checkBox_SC_phaseC.isChecked() is True:
                         short_circuit_phases = '1'
                         terminales = '.3'
                         terminales2 = '.0'
@@ -3287,7 +3589,7 @@ class QGISrunOpenDSS(object):
                         short_circuit_bus = QCoreApplication.translate('SC', 'MT_BT')
     
                     # results output folder
-                    final_output_folder = output_folder + '/Short_Circuit/' + 'BUS_' + str(short_circuit_bus) + '/'
+                    final_output_folder = output_folder + '/Short_Circuit/' + 'BUS_' + str(short_circuit_bus)+ '/'
                     if not os.path.exists(final_output_folder):
                         os.makedirs(final_output_folder)
                     DSSprogress.PctProgress = 20
@@ -3302,9 +3604,9 @@ class QGISrunOpenDSS(object):
                     DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the transformer secondary side to monitor P and Q
                     if tx_modelling and self.substation != 'Auto':
                         DSStext.Command = line_tx_definition
-                    for MC_iteration in range( int(number_simulations) ):  # Run Monte Carlo Simulations
+                    for MC_iteration in range(int(number_simulations)):  # Run Monte Carlo Simulations
                         # Run the daily power flow for a particular moment
-                        DSScircuit.Solution.Solve()  # Initialization solution
+                        DSScircuit.Solution.Solve() # Initialization solution
                         busNames = DSScircuit.ALLBusNames  # all buses names
                         gen_p = 0
                         gen_q = 0
@@ -3333,7 +3635,7 @@ class QGISrunOpenDSS(object):
 
                         errorP = 0.03  # Maximum desired correction error for active power
                         errorQ = 0.1  # Maximum desired correction error for reactive power
-                        max_it_correction = 10  # Maximum number of allowed iterations
+                        max_it_correction = 100  # Maximum number of allowed iterations
                         study = 'snapshot'  # Study type for PQ_corrector
                         #DSStext.Command = 'batchedit storage..* enabled = no' # No storage simulation
 
@@ -3389,15 +3691,17 @@ class QGISrunOpenDSS(object):
                         nodeVoltages_ph2 = []
                         nodeVoltages_ph3 = []
                         currentList = []  # current list
-                        DSStext.Command = 'batchedit load..* kW=' + str(kW_sim[0])  # set kW corrector
-                        DSStext.Command = 'batchedit load..* kVAr=' + str(kVAr_sim[0])  # set kVAr corrector
+                        DSStext.Command = 'batchedit load.n_.* kW=' + str(kW_sim[0]) # set kW corrector
+                        DSStext.Command = 'batchedit load.n_.* kVAr=' + str(kVAr_sim[0]) # set kVAr corrector
                         DSStext.Command = 'batchedit PVSystem..* %R=75'  # set %R to PV systems for 1.1 pu SC current
                         DSStext.Command = 'batchedit PVSystem..* %X=75'  # set %X to PV systems for 1.1 pu SC current
-                        if not 5 < int(hora_sec[0]) < 18:
+                        if not 5 < int(hora_sec[0])< 18:
                             DSStext.Command = 'batchedit PVSystem..* enabled=no'  # set PVSystem enable
                         # set results output folder
-                        DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
-                        DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
+                        if self.lv_lines is True:
+                                DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
+                        if self.mv_lines is True:
+                            DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
                         DSStext.Command = 'set datapath=' + final_output_folder
                         DSScircuit.Solution.Solve()
     
@@ -3418,7 +3722,7 @@ class QGISrunOpenDSS(object):
                                     sc_bus1 = i + terminales
                                     sc_bus2 = i + terminales2
                                     sc_bus3 = i + terminales3
-                                    if self.dlg.checkBox_SC_phaseLL.isChecked() and short_circuit_phases == '2':
+                                    if self.dlg.checkBox_SC_phaseLL.isChecked()and short_circuit_phases == '2':
                                         sc_bus2 = i + '.' + terminales.split('.')[2]
     
                                     # edit fault object
@@ -3437,7 +3741,7 @@ class QGISrunOpenDSS(object):
                                     sc_bus1 = i + terminales
                                     sc_bus2 = i + terminales2
                                     sc_bus3 = i + terminales3
-                                    if self.dlg.checkBox_SC_phaseLL.isChecked() and short_circuit_phases == '2':
+                                    if self.dlg.checkBox_SC_phaseLL.isChecked()and short_circuit_phases == '2':
                                         sc_bus2 = i + '.' + terminales.split('.')[2]
                                     # edit fault object
                                     DSStext.Command = 'Edit Fault.F1 phases=' + short_circuit_phases + ' Bus1=' + sc_bus1 + ' Bus2=' + sc_bus2 + ' R=0.002'
@@ -3454,7 +3758,7 @@ class QGISrunOpenDSS(object):
                                 sc_bus1 = i + terminales
                                 sc_bus2 = i + terminales2
                                 sc_bus3 = i + terminales3
-                                if self.dlg.checkBox_SC_phaseLL.isChecked() and short_circuit_phases == '2':
+                                if self.dlg.checkBox_SC_phaseLL.isChecked()and short_circuit_phases == '2':
                                     sc_bus2 = i + '.' + terminales.split('.')[2]
                                 DSStext.Command = 'Edit Fault.F1 phases=' + short_circuit_phases + ' Bus1=' + sc_bus1 + ' Bus2=' + sc_bus2 + ' R=0.002'
                                 if terminales3 != '':
@@ -3469,7 +3773,7 @@ class QGISrunOpenDSS(object):
                             sc_bus1 = i + terminales
                             sc_bus2 = i + terminales2
                             sc_bus3 = i + terminales3
-                            if self.dlg.checkBox_SC_phaseLL.isChecked() and short_circuit_phases == '2':
+                            if self.dlg.checkBox_SC_phaseLL.isChecked()and short_circuit_phases == '2':
                                 sc_bus2 = i + '.' + terminales.split('.')[2]
                             DSStext.Command = 'Edit Fault.F1 phases=' + short_circuit_phases + ' Bus1=' + sc_bus1 + ' Bus2=' + sc_bus2 + ' R=0.002'
                             if terminales3 != '':
@@ -3482,9 +3786,9 @@ class QGISrunOpenDSS(object):
                                 nodeNames_ph1 = DSScircuit.AllNodeNamesByPhase(1)
                                 nodeNames_ph2 = DSScircuit.AllNodeNamesByPhase(2)
                                 nodeNames_ph3 = DSScircuit.AllNodeNamesByPhase(3)
-                                nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)])  # Buses pu voltages ph1
-                                nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)])  # Buses pu voltages ph2
-                                nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)])  # Buses pu voltages ph3
+                                nodeVoltages_ph1.append([DSScircuit.AllNodeVmagPUByPhase(1)]) # Buses pu voltages ph1
+                                nodeVoltages_ph2.append([DSScircuit.AllNodeVmagPUByPhase(2)]) # Buses pu voltages ph2
+                                nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)]) # Buses pu voltages ph3
                                 # voltages shapes update
                                 busesDict = auxfcns.ReadBusVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nodeNames_ph1, nodeNames_ph2, nodeNames_ph3)
                                 auxfcns.WriteBusVolts(self, busesDict, name_file_created, "shortcircuit")
@@ -3494,21 +3798,21 @@ class QGISrunOpenDSS(object):
                             if terminales3 != '':
                                 DSStext.Command = 'Visualize Currents Fault.F2'
                             DSSprogress.PctProgress = 100
-                        tfinal_short_circuit = time.time() - tinitial_short_circuit
+                        tfinal_short_circuit = time.time()- tinitial_short_circuit
                         DSSprogress.Close()
-                        if not self.dlg.powerflow_snapshot.isChecked() and not self.dlg.powerflow_daily.isChecked() \
-                                and not self.dlg.harmonics.isChecked() and not self.dlg.powerflow_yearly.isChecked():
+                        if not self.dlg.powerflow_snapshot.isChecked()and not self.dlg.powerflow_daily.isChecked()\
+                                and not self.dlg.harmonics.isChecked()and not self.dlg.powerflow_yearly.isChecked():
                             QMessageBox.information(None, QCoreApplication.translate('dialog',
                                                                                      "Analisis de Corto Circuito Terminado"), \
-                                                    QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
-                                                        tfinal_short_circuit + time_common_for_all) + " s" + "\n" + \
+                                                    QCoreApplication.translate('dialog', "Tiempo de simulacion: ")+ str(
+                                                        tfinal_short_circuit + time_common_for_all)+ " s" + "\n" + \
                                                     QCoreApplication.translate('dialog',
-                                                                               "Los archivos han sido guardados en: ") + output_folder)
+                                                                               "Los archivos han sido guardados en: ")+ output_folder)
                         os.system('clear')
     
-                ###################################################################################
-                ###############################      HARMONICS      ###############################
-                ###################################################################################
+                # ##############################################
+                # #############    HARMONICS    ################
+                # ##############################################
                 # harmonics simulation routine
                 try:
                     if self.dlg.harmonics.isChecked():
@@ -3522,7 +3826,7 @@ class QGISrunOpenDSS(object):
                                                 
                         if harmonic_num == "":
                             harmonic_num = "1-25" #si el usuario no introdujo un valor se establece el valor por defecto
-                        harmonics, NumHarm = Harmonics.harmonic_choice(harmonic_num)                
+                        harmonics, NumHarm = Harmonics.harmonic_choice(harmonic_num)               
         
                         # spectrum creation
                         if self.dlg.checkBox_harm_res.isChecked():
@@ -3531,7 +3835,7 @@ class QGISrunOpenDSS(object):
                                 DSSprogress.Close()
                                 QMessageBox.information(None, QCoreApplication.translate('dialog', u"Información Requerida"),
                                                         QCoreApplication.translate('dialog',
-                                                                                   u"Seleccione el espectro de armónicos residencial") + '\n')
+                                                                                   u"Seleccione el espectro de armónicos residencial")+ '\n')
                                 return # exit on except
         
                         if self.dlg.checkBox_harm_gen.isChecked():
@@ -3540,7 +3844,7 @@ class QGISrunOpenDSS(object):
                                 DSSprogress.Close()
                                 QMessageBox.information(None, QCoreApplication.translate('dialog', u"Información Requerida"),
                                                         QCoreApplication.translate('dialog',
-                                                                                   u"Seleccione el espectro de armónicos comercial e industrial") + '\n')
+                                                                                   u"Seleccione el espectro de armónicos comercial e industrial")+ '\n')
                                 return # exit on except
         
                         if self.dlg.checkBox_harm_TMT.isChecked():
@@ -3550,7 +3854,7 @@ class QGISrunOpenDSS(object):
                                 QMessageBox.information(None,
                                                         QCoreApplication.translate('dialog', u"Información Requerida"),
                                                         QCoreApplication.translate('dialog',
-                                                                                   u"Seleccione el espectro de armónicos TMT") + '\n')
+                                                                                   u"Seleccione el espectro de armónicos TMT")+ '\n')
                                 return  # exit on except   
         
                         selected_parameter = 0;
@@ -3564,26 +3868,26 @@ class QGISrunOpenDSS(object):
                         if self.dlg.snapshot.isChecked():
 							# Date
                             harmonicdate = self.dlg.lineEdit_harmonic_date.text().upper()
-                            harmonicdate = correct_date( load_curve_circuit, harmonicdate )
+                            harmonicdate = correct_date(load_curve_circuit, harmonicdate)
                             if not harmonicdate:
                                 harmonicdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
                             harm_daily_date = str(harmonicdate.replace('/', ''))
 							
                             harmonictime = self.dlg.lineEdit_harmonic_time.text().upper()
-                            harmonictime = correct_hour( load_curve_circuit, harmonictime )
+                            harmonictime = correct_hour(load_curve_circuit, harmonictime)
                             if not harmonictime:
                                 harmonictime = def_time  # default: 18:00
         
-                            h, m = harmonictime.split(':')  # round hour to 10min multiples
+                            h, m = harmonictime.split(':') # round hour to 10min multiples
                             if list(m)[1] != '0':
-                                if int(list(m)[1]) <= 5:
+                                if int(list(m)[1])<= 5:
                                     m = list(m)[0] + str(0)
-                                elif int(list(m)[1]) > 5:
-                                    if int(list(m)[0]) < 5:
-                                        m = list(m)[0] + str(int(list(m)[1]) + 1)
+                                elif int(list(m)[1])> 5:
+                                    if int(list(m)[0])< 5:
+                                        m = list(m)[0] + str(int(list(m)[1])+ 1)
                                     else:
-                                        h = list(h)[0] + str(int(list(h)[1]) + 1)
-                                        if int(h) >= 24:
+                                        h = list(h)[0] + str(int(list(h)[1])+ 1)
+                                        if int(h)>= 24:
                                             h = '00'
                                         m = '00'
                                 harmonictime = h + ':' + m
@@ -3596,7 +3900,7 @@ class QGISrunOpenDSS(object):
                         if self.dlg.daily.isChecked():
 							# Date
                             harmonicdate = self.dlg.lineEdit_harmonic_date_daily.text().upper()
-                            harmonicdate = correct_date( load_curve_circuit, harmonicdate )
+                            harmonicdate = correct_date(load_curve_circuit, harmonicdate)
                             if not harmonicdate:
                                 harmonicdate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
             
@@ -3607,14 +3911,14 @@ class QGISrunOpenDSS(object):
                                 for m in range(6):
                                     if m == 0:
                                         if h < 10:
-                                            H_Time.append('0' + str(h) + ':00')
+                                            H_Time.append('0' + str(h)+ ':00')
                                         else:
-                                            H_Time.append(str(h) + ':00')
+                                            H_Time.append(str(h)+ ':00')
                                     else:
                                         if h < 10:
-                                            H_Time.append('0' + str(h) + ':' + str(m * 10))
+                                            H_Time.append('0' + str(h)+ ':' + str(m * 10))
                                         else:
-                                            H_Time.append(str(h) + ':' + str(m * 10))
+                                            H_Time.append(str(h)+ ':' + str(m * 10))
         
                         ##################################
                         ######### HARMONIC SIM ###########
@@ -3624,7 +3928,7 @@ class QGISrunOpenDSS(object):
                         DQ_to_be_matched = []
                         for ij in range(len(circuit_demand)):
                             temp_a = circuit_demand[ij][0]
-                            if str(temp_a.replace('/', '')) == str(harm_daily_date.replace('/', '')):
+                            if str(temp_a.replace('/', ''))== str(harm_daily_date.replace('/', '')):
                                 DP_to_be_matched.append(circuit_demand[ij][2])
                                 DQ_to_be_matched.append(circuit_demand[ij][3])
         
@@ -3669,7 +3973,7 @@ class QGISrunOpenDSS(object):
         
                         errorP = 0.03  # Maximum desired correction error for active power
                         errorQ = 0.1  # Maximum desired correction error for reactive power
-                        max_it_correction = 10  # Maximum number of allowed iterations
+                        max_it_correction = 100  # Maximum number of allowed iterations
                         study = 'daily'  # Study type for PQ_corrector
                         #DSStext.Command = 'batchedit storage..* enabled = no' # Preguntar Orlo
                         # load allocations algorithm
@@ -3681,16 +3985,16 @@ class QGISrunOpenDSS(object):
                         
                         if DSScircuit == None:
                             self.iface.messageBar().pushCritical("QGISRunOpenDSS", QCoreApplication.translate('dialog',
-                                                                                                       u'Sucedió un error grave y no fue posible completar la operación'))  
+                                                                                                       u'Sucedió un error grave y no fue posible completar la operación')) 
                             return
                         
                         # interpolate from 96 pts to 144 pts
                         x_96 = np.arange(0, 96, 1)
-                        x_144 = np.arange(0, 96, 0.67)              
+                        x_144 = np.arange(0, 96, 0.67)             
                        
                         try:    
                             kW_sim_144 = np.interp(x_144, x_96, kW_sim)
-                            kVAr_sim_144 = np.interp(x_144, x_96, kVAr_sim)          
+                            kVAr_sim_144 = np.interp(x_144, x_96, kVAr_sim)         
         
                             PQ_Time = []  ## time array from 00:00:00 to 23:50:00, 10 minutes step
                             i = 0
@@ -3698,19 +4002,19 @@ class QGISrunOpenDSS(object):
                                 for m in range(6):
                                     if m == 0:
                                         if h < 10:
-                                            PQ_Time.append(['0' + str(h) + ':00', kW_sim_144[i], kVAr_sim_144[i]])
+                                            PQ_Time.append(['0' + str(h)+ ':00', kW_sim_144[i], kVAr_sim_144[i]])
                                         else:
-                                            PQ_Time.append([str(h) + ':00', kW_sim_144[i], kVAr_sim_144[i]])
+                                            PQ_Time.append([str(h)+ ':00', kW_sim_144[i], kVAr_sim_144[i]])
                                     else:
                                         if h < 10:
-                                            PQ_Time.append(['0' + str(h) + ':' + str(m * 10), kW_sim_144[i], kVAr_sim_144[i]])
+                                            PQ_Time.append(['0' + str(h)+ ':' + str(m * 10), kW_sim_144[i], kVAr_sim_144[i]])
                                         else:
-                                            PQ_Time.append([str(h) + ':' + str(m * 10), kW_sim_144[i], kVAr_sim_144[i]])
+                                            PQ_Time.append([str(h)+ ':' + str(m * 10), kW_sim_144[i], kVAr_sim_144[i]])
                                     i += 1
                         except:
                             QMessageBox.information(None,
                                                     QCoreApplication.translate('dialog', u"Análisis de armónicos terminado"),
-                                                    QCoreApplication.translate('dialog', "Potencia simulada es cero. \nFavor verifique lo siguiente: \n-Que la fecha de simulación sea correcta\n -Que todas las cargas se encuentren conectadas") )        
+                                                    QCoreApplication.translate('dialog', "Potencia simulada es cero. \nFavor verifique lo siguiente: \n-Que la fecha de simulación sea correcta\n -Que todas las cargas se encuentren conectadas"))       
         
                         PVS = []
                         readerPV = []
@@ -3748,24 +4052,17 @@ class QGISrunOpenDSS(object):
                                                    DSStext, DSSprogress,
                                                    DSScircuit, final_output_folder, counter, tx_conn_low, PVS, readerPV,
                                                    str_time, tx_active, firstLine, PQ_Time, self.substation)
-                            tfinal_harmonics = time.time() - tinitial_harmonics
+                            tfinal_harmonics = time.time()- tinitial_harmonics
                             QMessageBox.information(None,
                                                     QCoreApplication.translate('dialog', u"Análisis de armónicos terminado"),
-                                                    QCoreApplication.translate('dialog', "Tiempo de simulacion: ") + str(
-                                                        tfinal_harmonics + time_common_for_all) + " s" + "\n" + \
+                                                    QCoreApplication.translate('dialog', "Tiempo de simulacion: ")+ str(
+                                                        tfinal_harmonics + time_common_for_all)+ " s" + "\n" + \
                                                     QCoreApplication.translate('dialog',
-                                                                               "Los archivos han sido guardados en: ") + "\n" + output_folder)
+                                                                               "Los archivos han sido guardados en: ")+ "\n" + output_folder)
                         except UnboundLocalError as e:
                             # fix_print_with_import
                             print(e)
-                            
-                            exc_info = sys.exc_info()
-                            print("\nError: ", exc_info )
-                            print("*************************  Información detallada del error ********************")
-                            
-                            for tb in traceback.format_tb(sys.exc_info()[2]):
-                                print(tb)
-                                
+                            self.print_error()
                             QMessageBox.information(None, QCoreApplication.translate('dialog', u"Análisis de armónicos"),
                                                     QCoreApplication.translate('dialog',
                                                                                "No se ha seleccionado el tipo de estudio"))
@@ -3775,28 +4072,17 @@ class QGISrunOpenDSS(object):
                 except:            
                     DSSprogress.Close()
                     self.progress.close()
-                    exc_info = sys.exc_info()
-                    print("\nError: ", exc_info )
-                    print("*************************  Información detallada del error ********************")
-                    
-                    for tb in traceback.format_tb(sys.exc_info()[2]):
-                        print(tb)
-                    
-                    QMessageBox.critical(None, QCoreApplication.translate('dialog', "Error"),
-                                        QCoreApplication.translate('dialog',
-                                                                   u"No se finalizar la simulación de armónicos. Favor revisar el código de error en la consola"))                                                                                             
+                    msg_ = self.print_error()
+                    msg = "No se finalizar la simulación de armónicos. "
+                    msg += "Favor revisar el siguiente error:\n"
+                    msg += msg_
+                    QMessageBox.critical(None, "Error", msg)
                     return # exit on except
-                print( "Simulations end" )
+                print("Simulations end")
         except: 
-            exc_info = sys.exc_info()
-            print("\nError: ", exc_info )
-            print("*************************  Información detallada del error ********************")
-            
-            for tb in traceback.format_tb(sys.exc_info()[2]):
-                print(tb)
-            
-            QMessageBox.critical(None, QCoreApplication.translate('dialog', "Error"),
-                                QCoreApplication.translate('dialog',
-                                                           u"Error crítico. Favor revisar el código de error en la consola"))                                                                                             
-            return # exit on except
+            msg_ = self.print_error()
+            msg = "Favor corrija el siguiente error:\n"
+            msg += msg_
+            QMessageBox.critical(None, "Error", msg)
+            return
 

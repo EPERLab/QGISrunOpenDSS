@@ -1,0 +1,688 @@
+<!DOCTYPE QPH>
+<QPH language="en_GB" sourcelanguage="es_CR">
+<phrase>
+    <source>QGIS2RunOpenDSS - Correr estudio de red usando OpenDSS</source>
+    <target>QGIS2RunOpenDSS - Runs grid studies using OpenDSS</target>
+</phrase>
+<phrase>
+    <source>Nombre del circuito</source>
+    <target>Circuit name</target>
+</phrase>
+<phrase>
+    <source>Asigne la curva de demanda</source>
+    <target>Assign the demand curve</target>
+</phrase>
+<phrase>
+    <source>...</source>
+    <target></target>
+</phrase>
+<phrase>
+    <source>Defina el ángulo (grados)</source>
+    <target>Define the angle (degrees)</target>
+</phrase>
+<phrase>
+    <source>Defina la frecuencia (Hz)</source>
+    <target>Define frequency (Hz)</target>
+</phrase>
+<phrase>
+    <source>Defina la tensión (kV)</source>
+    <target>Define voltage (kV)</target>
+</phrase>
+<phrase>
+    <source>Seleccione la ubicación de los archivos de salida</source>
+    <target>Select the destination folder for results</target>
+</phrase>
+<phrase>
+    <source>Transformador principal</source>
+    <target>Main transformer</target>
+</phrase>
+<phrase>
+    <source>Definir Parámetros</source>
+    <target>Define parameters</target>
+</phrase>
+<phrase>
+    <source>Flujos de potencia</source>
+    <target>Power flows</target>
+</phrase>
+<phrase>
+    <source>Flujo de potencia instantáneo</source>
+    <target>Snapshot power flow</target>
+</phrase>
+<phrase>
+    <source>Defina la fecha de la simulación</source>
+    <target>Define simulation date </target>
+</phrase>
+<phrase>
+    <source>dd/mm/aaaa</source>
+    <target></target>
+</phrase>
+<phrase>
+    <source>Defina la hora de la simulación</source>
+    <target>Define simulation hour</target>
+</phrase>
+<phrase>
+    <source>Flujo de potencia diario</source>
+    <target>Daily power flow</target>
+</phrase>
+<phrase>
+    <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;MT&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+    <target></target>
+</phrase>
+<phrase>
+    <source>Fase A</source>
+    <target>Phase A</target>
+</phrase>
+<phrase>
+    <source>Fase B</source>
+    <target>Phase B</target>
+</phrase>
+<phrase>
+    <source>Fase C</source>
+    <target>Phase C</target>
+</phrase>
+<phrase>
+    <source>Promedio</source>
+    <target>Average</target>
+</phrase>
+<phrase>
+    <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;BT&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+    <target></target>
+</phrase>
+<phrase>
+    <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600; color:#0000ff;&quot;&gt;Gráficas LN&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+    <target></target>
+</phrase>
+<phrase>
+    <source>Flujo de potencia anual</source>
+    <target>Yearly power flow</target>
+</phrase>
+<phrase>
+    <source>Defina la resolución de la simulación</source>
+    <target>Define the simulation resolution</target>
+</phrase>
+<phrase>
+    <source>Corto circuito</source>
+    <target>Short circuit</target>
+</phrase>
+<phrase>
+    <source>Análisis de corto circuito</source>
+    <target>Short circuit analysis</target>
+</phrase>
+<phrase>
+    <source>Barra en corto circuito</source>
+    <target>Short circuit bus</target>
+</phrase>
+<phrase>
+    <source>Fases en corto circuito</source>
+    <target>Phases in short circuit</target>
+</phrase>
+<phrase>
+    <source>A</source>
+    <target></target>
+</phrase>
+<phrase>
+    <source>B</source>
+    <target></target>
+</phrase>
+<phrase>
+    <source>C</source>
+    <target></target>
+</phrase>
+<phrase>
+    <source>Añadir tecnologías</source>
+    <target>Technologies</target>
+</phrase>
+<phrase>
+    <source>Capacidad total (kW)</source>
+    <target>Total capacity (kW)</target>
+</phrase>
+<phrase>
+    <source>default 200</source>
+    <target>Default 200</target>
+</phrase>
+<phrase>
+    <source>Vehículos eléctricos</source>
+    <target>Electric Vehicles (EVs)</target>
+</phrase>
+<phrase>
+    <source>Añadir vehículos eléctricos</source>
+    <target>Add EVs</target>
+</phrase>
+<phrase>
+    <source>default 20</source>
+    <target>Default 20</target>
+</phrase>
+<phrase>
+    <source>Nivel de penetración (%):</source>
+    <target>Penetration level (%)</target>
+</phrase>
+<phrase>
+    <source>Estrategia de ubicación</source>
+    <target>Ubication strategy</target>
+</phrase>
+<phrase>
+    <source>Aleatoria</source>
+    <target>Random</target>
+</phrase>
+<phrase>
+    <source>Probabilística</source>
+    <target>Probability</target>
+</phrase>
+<phrase>
+    <source>Por consumo</source>
+    <target>Consumption</target>
+</phrase>
+<phrase>
+    <source>Armónicos</source>
+    <target>Harmonics</target>
+</phrase>
+<phrase>
+    <source>Flujo de potencia de armónicos</source>
+    <target>Harmonics power flow</target>
+</phrase>
+<phrase>
+    <source>Asigne el archivo de parámetros residenciales</source>
+    <target>Assign the residential parameters file</target>
+</phrase>
+<phrase>
+    <source>Seleccione archivo</source>
+    <target>Select the file</target>
+</phrase>
+<phrase>
+    <source>Defina los armonicos a simular</source>
+    <target>Define the harmonics to simulate</target>
+</phrase>
+<phrase>
+    <source>(e.j. 1-25)</source>
+    <target>(example, 1-25)</target>
+</phrase>
+<phrase>
+    <source>Defina la fecha inicial de la simulación</source>
+    <target>Define start date of simulation</target>
+</phrase>
+<phrase>
+    <source>Nombre barra del alimentador</source>
+    <target>First circuit bus name</target>
+</phrase>
+<phrase>
+    <source>Linea - linea</source>
+    <target>Line-line</target>
+</phrase>
+<phrase>
+    <source>Generación distribuida</source>
+    <target>Distributed generation</target>
+</phrase>
+<phrase>
+    <source>Añadir sistemas fotovoltaicos</source>
+    <target>Add PV systems</target>
+</phrase>
+<phrase>
+    <source>Ingrese kA 1p de corto circuito</source>
+    <target>Short circuit 1ph kA</target>
+</phrase>
+<phrase>
+    <source>Ingrese kA 3p de corto circuito</source>
+    <target>Short circuit 3ph kA</target>
+</phrase>
+<phrase>
+    <source>MVA</source>
+    <target>MVA</target>
+</phrase>
+<phrase>
+    <source>kA</source>
+    <target>kA</target>
+</phrase>
+<phrase>
+    <source>En horas (default 1h)</source>
+    <target>In hours (default 1h)</target>
+</phrase>
+<phrase>
+    <source>Ver pérdidas</source>
+    <target>See losses</target>
+</phrase>
+<phrase>
+    <source>Ver desbalances de tensión</source>
+    <target>See voltage unbalance</target>
+</phrase>
+<phrase>
+    <source>Residencial</source>
+    <target>Residential</target>
+</phrase>
+<phrase>
+    <source>General</source>
+    <target>Commercial and Industrial</target>
+</phrase>
+<phrase>
+    <source>TMT</source>
+    <target>MV</target>
+</phrase>
+<phrase>
+    <source>Seleccione los archivos de información</source>
+    <target>Choose information files</target>
+</phrase>
+<phrase>
+    <source>Tipo de estudio</source>
+    <target>Study type</target>
+</phrase>
+<phrase>
+    <source>Archivos de parámetros</source>
+    <target>Parameter files</target>
+</phrase>
+<phrase>
+    <source>Guardar resultados en capas</source>
+    <target>Save results on shape</target>
+</phrase>
+<phrase>
+    <source>Progreso</source>
+    <target>Advancement</target>
+</phrase>
+<phrase>
+    <source>Todas las barras MT</source>
+    <target>All MT buses</target>
+</phrase>
+<phrase>
+    <source>Todas las barras BT</source>
+    <target>All BT buses</target>
+</phrase>
+<phrase>
+    <source>Todas las barras MT y BT</source>
+    <target>All MT and BT buses</target>
+</phrase>
+<phrase>
+    <source>Transformador principal</source>
+    <target>Main transformer</target>
+</phrase>
+<phrase>
+    <source>Reactancias del transformador (%)</source>
+    <target>Transformer reactance (%)</target>
+</phrase>
+<phrase>
+    <source>Alta-Baja</source>
+    <target>High-Low</target>
+</phrase>
+<phrase>
+    <source>Alta-Terc.</source>
+    <target>High-Terc.</target>
+</phrase>
+<phrase>
+    <source>Terc.-Baja</source>
+    <target>Terc.-Low</target>
+</phrase>
+<phrase>
+    <source>Conexiones del transformador</source>
+    <target>Transformer connections</target>
+</phrase>
+<phrase>
+    <source>Alta</source>
+    <target>High</target>
+</phrase>
+<phrase>
+    <source>Baja</source>
+    <target>Low</target>
+</phrase>
+<phrase>
+    <source>Terciario</source>
+    <target>Terciary</target>
+</phrase>
+<phrase>
+    <source>Potencias del transformador (kVAs)</source>
+    <target>Transformer power (kVAs)</target>
+</phrase>
+<phrase>
+    <source>Pérdidas en el transformador (%)</source>
+    <target>Transformer losses (%)</target>
+</phrase>
+<phrase>
+    <source>En vacío</source>
+    <target>No load</target>
+</phrase>
+<phrase>
+    <source>Bajo carga</source>
+    <target>On load</target>
+</phrase>
+<phrase>
+    <source>Tensiones del transformador (kV)</source>
+    <target>Transformer voltages (kV)</target>
+</phrase>
+<phrase>
+    <source>Tap del transformador</source>
+    <target>Transformer tap</target>
+</phrase>
+<phrase>
+    <source>Número de taps</source>
+    <target>Tap quantity</target>
+</phrase>
+<phrase>
+    <source>Máximo tap</source>
+    <target>Maximum tap</target>
+</phrase>
+<phrase>
+    <source>Mínimo tap</source>
+    <target>Minimum tap</target>
+</phrase>
+<phrase>
+    <source>Posición tap</source>
+    <target>Tap position</target>
+</phrase>
+<phrase>
+    <source>Ubicación</source>
+    <target>Tap position</target>
+</phrase>
+<phrase>
+    <source>Correr estudio de red usando OpenDSS</source>
+    <target>Run a network study using OpenDSS</target>
+</phrase>
+<phrase>
+    <source>Seleccione carpeta de salida</source>
+    <target>Select an output folder</target>
+</phrase>
+<phrase>
+    <source>Seleccione el archivo .CSV para asignar curva de demanda de circuito</source>
+    <target>Select the .CSV file to assign a demand curve</target>
+</phrase>
+<phrase>
+    <source>Error al abrir el archivo</source>
+    <target>Error at trying to open the file</target>
+</phrase>
+<phrase>
+    <source>El projecto en QGIS debe estar abierto</source>
+    <target>The QGIS project must be open</target>
+</phrase>
+<phrase>
+    <source>Estrella</source>
+    <target>Wye</target>
+</phrase>
+<phrase>
+    <source>Delta</source>
+    <target>Delta</target>
+</phrase>
+<phrase>
+    <source>Alta</source>
+    <target>High</target>
+</phrase>
+<phrase>
+    <source>Baja</source>
+    <target>Low</target>
+</phrase>
+<phrase>
+    <source>Informacion Requerida</source>
+    <target>Information required</target>
+</phrase>
+<phrase>
+    <source>defina el nombre de la barra principal</source>
+    <target>defne the first circuit bus name</target>
+</phrase>
+<phrase>
+    <source>Seleccione la curva de demanda del alimentador</source>
+    <target>Select the feeder demand curve </target>
+</phrase>
+<phrase>
+    <source>Defina el nombre de la barra principal</source>
+    <target>Define the name</target>
+</phrase>
+<phrase>
+    <source>Simulacion Instantanea Terminada</source>
+    <target>Snapshot simulation ended</target>
+</phrase>
+<phrase>
+    <source>Tiempo de simulacion: </source>
+    <target>Simulation time:</target>
+</phrase>
+<phrase>
+    <source>Los archivos han sido guardados en:</source>
+    <target>The files has been stored in:</target>
+</phrase>
+<phrase>
+    <source>Simulacion Diaria Terminada</source>
+    <target>Daily simulation ended</target>
+</phrase>
+<phrase>
+    <source>Simulacion Anual Terminada</source>
+    <target>Yearly simulation ended</target>
+</phrase>
+<phrase>
+    <source>Analisis de Corto Circuito Terminado</source>
+    <target>Short circuit analysis ended</target>
+</phrase>
+<phrase>
+    <source>Error</source>
+    <target>Error</target>
+</phrase>
+<phrase>
+    <source>No se pudo reconocer la cantidad de armÃ³nicos deseados</source>
+    <target>Can&apos;t recognize desired harmonics</target>
+</phrase>
+<phrase>
+    <source>No se ha seleccionado el tipo de estudio</source>
+    <target>Please choose study type</target>
+</phrase>
+<phrase>
+    <source>Aleatorio</source>
+    <target>Random</target>
+</phrase>
+<phrase>
+    <source>Mayor consumo</source>
+    <target>Higher consumption</target>
+</phrase>
+<phrase>
+    <source>Por probabilidad</source>
+    <target>Probability</target>
+</phrase>
+<phrase>
+    <source>Ingrese kA 3p de corto circuito</source>
+    <target>Short circuit 3ph kA</target>
+</phrase>
+<phrase>
+    <source>Ingrese kA 1p de corto circuito</source>
+    <target>Short circuit 1ph kA</target>
+</phrase>
+<phrase>
+    <source>Ingrese MVA 3p de corto circuito</source>
+    <target>Short circuit 3ph MVA</target>
+</phrase>
+<phrase>
+    <source>Ingrese MVA 1p de corto circuito</source>
+    <target>Short circuit 1ph MVA</target>
+</phrase>
+<phrase>
+    <source>Seleccione el archivo .CSV para asignar la informaciÃ³n de los sistemas fotovoltaicos</source>
+    <target>Choose *.csv file with PV System information</target>
+</phrase>
+<phrase>
+    <source>Seleccione el archivo .XLS para asignar el espectro de armÃ³nicos residencial</source>
+    <target>Choose *.xls file with residential harmonic spectra information</target>
+</phrase>
+<phrase>
+    <source>Transformador principal</source>
+    <target>Main transformer</target>
+</phrase>
+<phrase>
+    <source>Autotransformador en subestaciÃ³n</source>
+    <target>Substation autotransformer</target>
+</phrase>
+<phrase>
+    <source>Error al encontrar primera lÃ­nea</source>
+    <target>Error while looking for first line</target>
+</phrase>
+<phrase>
+    <source>Verficar conexiÃ³n de subestaciÃ³n</source>
+    <target>Check substation connection</target>
+</phrase>
+<phrase>
+    <source>El projecto en QGIS debe poseer el formato establecido en el manual</source>
+    <target>QGIS project must have the format stablished on user manual</target>
+</phrase>
+<phrase>
+    <source>y ya deben existir los archivos *.dss</source>
+    <target>and *.dss files must exist</target>
+</phrase>
+<phrase>
+    <source>para poder analizar la red de distribuciÃ³n</source>
+    <target>to analyze the distribution network</target>
+</phrase>
+<phrase>
+    <source>Informacion errÃ³nea</source>
+    <target>Wrong information</target>
+</phrase>
+<phrase>
+    <source>Curva de demanda del alimentador errÃ³nea</source>
+    <target>Wrong feeder curve</target>
+</phrase>
+<phrase>
+    <source>Seleccione el archivo de informaciÃ³n de paneles para clientes residenciales</source>
+    <target>Choose file with residential PV System information</target>
+</phrase>
+<phrase>
+    <source>Seleccione el archivo de informaciÃ³n de paneles para clientes comercial e industrial</source>
+    <target>Choose file with commercial and indutrial PV System information</target>
+</phrase>
+<phrase>
+    <source>Seleccione el archivo de informaciÃ³n de paneles para clientes TMT</source>
+    <target>Choose file with MV PV System information</target>
+</phrase>
+<phrase>
+    <source>No se ha seleccionado barra de estudio</source>
+    <target>Fault bus not selected</target>
+</phrase>
+<phrase>
+    <source>InformaciÃ³n Requerida</source>
+    <target>Required information</target>
+</phrase>
+<phrase>
+    <source>Seleccione el espectro de armÃ³nicos residencial</source>
+    <target>Choose residential harmonic spectra</target>
+</phrase>
+<phrase>
+    <source>AnÃ¡lisis de armÃ³nicos terminado</source>
+    <target>Harmonic analysis finished</target>
+</phrase>
+<phrase>
+    <source>AnÃ¡lisis de armÃ³nicos</source>
+    <target>Harmonic analysis</target>
+</phrase>
+<phrase>
+    <source>InstalaciÃ³n correcta</source>
+    <target>Installation complete</target>
+</phrase>
+<phrase>
+    <source>COM ya se encuentra instalado</source>
+    <target>COM is already installed</target>
+</phrase>
+<phrase>
+    <source>Para instalar el servidor COM, iniciar</source>
+    <target>Start QGIS with admin rights</target>
+</phrase>
+<phrase>
+    <source>QGIS en modo administrador</source>
+    <target>to install the COM server</target>
+</phrase>
+<phrase>
+    <source>No se encuentra instalado COM</source>
+    <target>COM server not installed</target>
+</phrase>
+<phrase>
+    <source>Ejecutar QGIS como administrador para realizar su correcta instalaciÃ³n</source>
+    <target>Start QGIS with admin rights</target>
+</phrase>
+<phrase>
+    <source>No se encuentra perfil de sistemas fotovoltaicos</source>
+    <target>PV Profile not found</target>
+</phrase>
+<phrase>
+    <source>Verificar ubicaciÃ³n o existencia de archivos PVprofile.txt y PVtemp.txt</source>
+    <target>Check existence of PVprofile.txt and PVtemp.txt</target>
+</phrase>
+<phrase>
+    <source>Alerta Buses</source>
+    <target>Warning: buses</target>
+</phrase>
+<phrase>
+    <source>InformaciÃ³n PV</source>
+    <target>PV information</target>
+</phrase>
+<phrase>
+    <source>Archivo de informaciÃ³n errÃ³neo:</source>
+    <target>Wrong information file:</target>
+</phrase>
+<phrase>
+    <source>Mayor potencia instalada lograda segÃºn archivo de informaciÃ³n 
+de instalaciones Ã³ptimas: </source>
+    <target>Installed PV peak power according to PV information file:</target>
+</phrase>
+<phrase>
+    <source>Real</source>
+    <target>Real</target>
+</phrase>
+<phrase>
+    <source>SimulaciÃ³n</source>
+    <target>Simulation</target>
+</phrase>
+<phrase>
+    <source>Tiempo</source>
+    <target>Time</target>
+</phrase>
+<phrase>
+    <source>Potencia Aparente [kVA]</source>
+    <target>Aparent Power [kVA]</target>
+</phrase>
+<phrase>
+    <source>Potencia Activa [kW]</source>
+    <target>Active Power [kW]</target>
+</phrase>
+<phrase>
+    <source>Potencia Reactiva [kVAr]</source>
+    <target>Reactive POwer [kVAr]</target>
+</phrase>
+<phrase>
+    <source>Desbalance</source>
+    <target>Unbalance</target>
+</phrase>
+<phrase>
+    <source>Barras</source>
+    <target>Buses</target>
+</phrase>
+<phrase>
+    <source>Desbalance (%)</source>
+    <target>Unbalance (%)</target>
+</phrase>
+<phrase>
+    <source>Hora</source>
+    <target>Hour</target>
+</phrase>
+<phrase>
+    <source>PÃ©rdidas Activas [kW]</source>
+    <target>Active losses [kW]</target>
+</phrase>
+<phrase>
+    <source>Corriente (A)</source>
+    <target>Current [A]</target>
+</phrase>
+<phrase>
+    <source>Corrientes armÃ³nicas (RMS)</source>
+    <target>Harmonic currents (RMS)</target>
+</phrase>
+<phrase>
+    <source>Corriente (%)</source>
+    <target>Current (%)</target>
+</phrase>
+<phrase>
+    <source>Corrientes armÃ³nicas %</source>
+    <target>Harmonic currents (%)</target>
+</phrase>
+<phrase>
+    <source>Snapshot</source>
+    <target>Snapshot</target>
+</phrase>
+<phrase>
+    <source>Daily</source>
+    <target>Daily</target>
+</phrase>
+<phrase>
+    <source>Short Circuit</source>
+    <target>Short Circuit</target>
+</phrase>
+<phrase>
+    <source>Load Allocation</source>
+    <target>Load Allocation</target>
+</phrase>
+</QPH>

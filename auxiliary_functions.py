@@ -5,14 +5,11 @@ from builtins import str
 from builtins import range
 import os
 import numpy as np
-import glob
 import csv
-import collections
 from collections import OrderedDict
 import datetime
 import random
 import subprocess
-import datetime as dt
 from PyQt5.QtGui import *  # Para desplegar mensajes, util para debugin
 from PyQt5.QtCore import *
 #from qgis.gui import QgsMessageBar  # Paquete requerido para desplegar mensajes en la ventana principal de QGIS.
@@ -35,7 +32,7 @@ def natural_sort(l):  # sort list in alphanumeric order
         return sorted(l, key=alphanum_key)
     except:
         exc_info = sys.exc_info()
-        print("\nError: ", exc_info )
+        print("\nError: ", exc_info)
         print("*************************  Información detallada del error ********************")
         
         
@@ -148,7 +145,7 @@ def ReadLoadProfiles(self, perfilespath, dir_network, name_file_created):  # rea
     
     except:
         exc_info = sys.exc_info()
-        print("\nError: ", exc_info )
+        print("\nError: ", exc_info)
         print("*************************  Información detallada del error ********************")
         
         
@@ -194,8 +191,10 @@ def ExtractVoltageData(DSScircuit, V_buses, Base_V, t): #FUNCIÓN MODIFICADA
     return V_buses
     
 
-def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it, P_to_be_matched, Q_to_be_matched, hora_sec,
-                 study, dir_network, tx_active, yearly_steps, firstLine, substation, line_tx_definition, gen_powers, gen_rpowers):
+def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ,
+                 max_it, P_to_be_matched, Q_to_be_matched, hora_sec,
+                 study, dir_network, tx_active, yearly_steps, firstLine,
+                 substation, line_tx_definition, gen_powers, gen_rpowers):
     """
     Load allocation algorithm
     :param errorP: maximum P error desired
@@ -216,7 +215,6 @@ def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it, P_to_
     :return: kW_corrector, kVAr_corrector arrays
     """
     try:
-
         # counter assignation according to study type
         if (study == 'snapshot') or (study == 'shortCircuit'):
             counter = 1
@@ -245,34 +243,26 @@ def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it, P_to_
         temp_powersP = ExtractMonitorData(DSScircuit, 'HVMV_PQ_vs_Time', [1, 3, 5], 1)
         temp_powersQ = ExtractMonitorData(DSScircuit, 'HVMV_PQ_vs_Time', [2, 4, 6], 1)
         
-        """
-        print( "temp_powers = ", temp_powers )
-        print( "temp_powersP = ", temp_powersP )
-        print( "temp_powersQ = ", temp_powersQ )
-        """
-        
-        # print temp_powersP
         temp_powersPtot = []
         temp_powersQtot = []
         
-        for i in range( int(counter) ):
+        for i in range(int(counter)):
             temp_powersPtot.append(np.sum(temp_powersP[i][:]))
             temp_powersQtot.append(np.sum(temp_powersQ[i][:]))
         temp_powersP = temp_powersPtot
         temp_powersQ = temp_powersQtot
         
-        kW_corrector = np.ones( int(counter) )  # kW corrector array init
+        kW_corrector = np.ones(int(counter))  # kW corrector array init
         # pf_corrector = DPF_to_be_matched
-        kVAr_corrector = np.ones( int(counter) )  # kVAr corrector array init
-        errorP_i = np.ones( int(counter) ) * 100  # P error array init
+        kVAr_corrector = np.ones(int(counter))  # kVAr corrector array init
+        errorP_i = np.ones(int(counter)) * 100  # P error array init
         errorP_av = 100
-        errorQ_i = np.ones( int(counter) ) * 100  # Q error array init
+        errorQ_i = np.ones(int(counter)) * 100  # Q error array init
         errorQ_av = 100
-    
         while errorQ_av > errorQ:  # and errorP_av > errorP:  # corrector iteration
             prog += 2
             DSSprogress.PctProgress = prog
-            #( "counter = ", int(counter),  ", len(DQ_to_be_matched) = ", len(DQ_to_be_matched) )
+            #("counter = ", int(counter),  ", len(DQ_to_be_matched) = ", len(DQ_to_be_matched))
             
             """
             if int(counter) != len(DQ_to_be_matched):            
@@ -283,14 +273,14 @@ def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it, P_to_
             """
             
     
-            for t in range( int(counter) ): # corrector loop
+            for t in range(int(counter)): # corrector loop
                 if DP_to_be_matched[t] != 0:                    
                     # P correction calc
-                    kW_corrector[t] = kW_corrector[t] * ((DP_to_be_matched[t] + gen_powers[t]) / (temp_powersP[t] + gen_powers[t]))                    
-                    
+                    k_corr_ant = kW_corrector[t]
+                    kW_corrector[t] = k_corr_ant * ((DP_to_be_matched[t] + gen_powers[t]) / (temp_powersP[t] + gen_powers[t]))
                     # Q correction calc
-                    kVAr_corrector[t] = kVAr_corrector[t] * ( (DQ_to_be_matched[t] + gen_rpowers[t]) / (temp_powersQ[t] + gen_rpowers[t]) )
-                    
+                    kVAr_corrector[t] = kVAr_corrector[t] * ((DQ_to_be_matched[t] + gen_rpowers[t]) / (temp_powersQ[t] + gen_rpowers[t]))
+                    print(kVAr_corrector[t]) 
                     
                 else:
                     kW_corrector[t] = 0 
@@ -302,6 +292,7 @@ def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it, P_to_
             DSStext.Command = 'clear'  # erase old circuits
             DSStext.Command = 'New Circuit.Circuito_Distribucion_Daily'  # create new circuit
             DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compila el archivo master de OpenDSS
+            
             if (study == 'daily') or (study == 'snapshot') or (study == 'shortCircuit'):
                 DSStext.Command = 'Set mode = daily'  # Define el tipo de simulacion a realizar (diaria en este caso)
             if study == 'yearly':
@@ -317,17 +308,15 @@ def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it, P_to_
                 DSStext.Command = 'Set h=' + str(yearly_steps / 4) + 'h'
             DSStext.Command = 'New Monitor.HVMV_PQ_vs_Time line.' + firstLine + ' 1 Mode=1 ppolar=0'  # Monitor in the first line to monitor P and Q
             if tx_active and substation != 'Auto':
-                DSStext.Command = line_tx_definition            
+                DSStext.Command = line_tx_definition
+                
     
             temp_powersP = []
             temp_powersQ = []
     
-            for t in range( int(counter) ):  # corrector loop
-    
-                # DSStext.Command = 'batchedit load..* pf='+str(pf_corrector[t])
-                
-                DSStext.Command = 'batchedit load..* kW=' + str(kW_corrector[t])  # apply kW corrector previously calculated
-                DSStext.Command = 'batchedit load..* kvar=' + str(kVAr_corrector[t])  # apply kVAr corrector previously calculated
+            for t in range(int(counter)):  # corrector loop
+                DSStext.Command = 'batchedit load.n_.* kW=' + str(kW_corrector[t])  # apply kW corrector previously calculated
+                DSStext.Command = 'batchedit load.n_.* kvar=' + str(kVAr_corrector[t])  # apply kVAr corrector previously calculated
                 DSScircuit.Solution.Solve()
                 # Result Query
                 DSScircuit.setActiveElement('line.' + firstLine)
@@ -351,11 +340,14 @@ def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ, max_it, P_to_
         errorP_i = errorP_av
         errorQ_i = errorQ_av
     
+        print("kW_corrector = ", kW_corrector)
+        print("kVAr_corrector = ", kVAr_corrector)
+        
         return DSScircuit, errorP_i, errorQ_i, temp_powersP, temp_powersQ, kW_corrector, kVAr_corrector
     
     except:
         exc_info = sys.exc_info()
-        print("\nError: ", exc_info )
+        print("\nError: ", exc_info)
         print("*************************  Información detallada del error ********************")
         
         
@@ -391,7 +383,7 @@ def busSC():  # extract all buses names for SC analysis, add them to UI
         for bus in LV:
             buses.append(bus['BUS'])
         #buses = natural_sort(buses)  # sort buses in alphanumerical order
-        #buses = list(reversed( buses ))
+        #buses = list(reversed(buses))
         buses_sort = ["",QCoreApplication.translate('SC', "Todas las barras MT"),
         QCoreApplication.translate('SC', 'Todas las barras BT'),
         QCoreApplication.translate('SC', 'Todas las barras MT y BT')] + buses  # add other options
@@ -440,9 +432,9 @@ def ReadBusVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nod
                 key = nodeNames_ph1[j].split('.')[0].upper()
                 dato = float(nodeVoltages_ph1[i][0][j])
                 if key in busesDic:
-                    busesDic[key].append( dato )
+                    busesDic[key].append(dato)
                 else:
-                    busesDic[key] = [ dato ]
+                    busesDic[key] = [dato]
                 
             #PH2
             vector_dato = []
@@ -450,9 +442,9 @@ def ReadBusVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nod
                 key = nodeNames_ph2[j].split('.')[0].upper()
                 dato = float(nodeVoltages_ph2[i][0][j])
                 if key in busesDic:
-                    busesDic[key].append( dato )
+                    busesDic[key].append(dato)
                 else:
-                    busesDic[key] = [ dato ]
+                    busesDic[key] = [dato]
                 
             #PH3
             vector_dato = []
@@ -460,21 +452,21 @@ def ReadBusVolts(self, nodeVoltages_ph1, nodeVoltages_ph2, nodeVoltages_ph3, nod
                 key = nodeNames_ph3[j].split('.')[0].upper()
                 dato = float(nodeVoltages_ph3[i][0][j])
                 if key in busesDic:
-                    busesDic[key].append( dato )
+                    busesDic[key].append(dato)
                 else:
-                    busesDic[key] = [ dato ]
+                    busesDic[key] = [dato]
             #Saca promedios a casos en que sea un vector de varios datos para esta iteración
             for dss_name, datos in  busesDic.items():
-                prom = closeOne( datos )
+                prom = closeOne(datos)
                 if dss_name in busesDicTot:
-                    busesDicTot[ dss_name ].append( prom )
+                    busesDicTot[dss_name].append(prom)
                 else:
-                    busesDicTot[ dss_name ] = [ prom ]
+                    busesDicTot[dss_name] = [prom]
         return busesDicTot
         
     except:
         exc_info = sys.exc_info()
-        print("\nError: ", exc_info )
+        print("\nError: ", exc_info)
         print("*************************  Información detallada del error ********************")
         
         
@@ -490,13 +482,24 @@ def WriteBusVolts(self, busesDic, name_file_created, study):
         # locate buses layers
         layerMVNames = [name_file_created.split('_')[0] + '_BusListMV', 'Bus_MV_Layer', 'Bus_MT_Layer']
         layerLVNames = [name_file_created.split('_')[0] + '_BusListLV', 'Bus_LV_Layer', 'Bus_BT_Layer']
+        
+        layers = QgsProject.instance().mapLayers().values()
+        layer_list = []
+        for layer in layers:
+            layer_list.append(layer.name())
+            
+        if 'Bus_LV_Layer' in layer_list or 'Bus_BT_Layer' in layer_list:
+            bt_layer = True
+        else:
+            bt_layer = False
         i = 0
         layerMV = ''
         layerLV = ''
         while a == 0:
             try:				
                 layerMV = QgsProject.instance().mapLayersByName(layerMVNames[i])[0]
-                layerLV = QgsProject.instance().mapLayersByName(layerLVNames[i])[0]
+                if bt_layer is True:
+                    layerLV = QgsProject.instance().mapLayersByName(layerLVNames[i])[0]
                 a = 1
             except IndexError:
                 i += 1
@@ -504,11 +507,13 @@ def WriteBusVolts(self, busesDic, name_file_created, study):
                     a = 1
         try:
             capsMV = layerMV.dataProvider().capabilities()
-            capsLV = layerMV.dataProvider().capabilities()
+            if bt_layer is True:
+                capsLV = layerMV.dataProvider().capabilities()
         except AttributeError:
             return
         layerMV.startEditing()
-        layerLV.startEditing()
+        if bt_layer is True:
+            layerLV.startEditing()
         
         if study == 'snapshot':
             limit = 1
@@ -519,7 +524,8 @@ def WriteBusVolts(self, busesDic, name_file_created, study):
         
         for i in range(limit):
             MV = layerMV.getFeatures()
-            LV = layerLV.getFeatures()
+            if bt_layer is True:
+                LV = layerLV.getFeatures()
             # attribute names
             if study == 'snapshot':
                 name = 'Vsnap'
@@ -528,33 +534,45 @@ def WriteBusVolts(self, busesDic, name_file_created, study):
             elif study == 'shortcircuit':
                 name = "Vsc"
             Idx_MV = getAttributeIndex(self, layerMV, name)
-            Idx_LV = getAttributeIndex(self, layerLV, name)
+            if bt_layer is True:
+                Idx_LV = getAttributeIndex(self, layerLV, name)
             # write attribute values on MV shape
             
             try:
                 if capsMV & QgsVectorDataProvider.ChangeAttributeValues:
                     for bus in MV:
                         try:
-                            bus_name = str( bus['BUS'] )
-                            dato = busesDic[ bus_name ][ i ]
-                            dato = str( '{0:.6f}'.format( dato ) )
-                            layerMV.changeAttributeValue( bus.id(), Idx_MV, dato )
+                            bus_name = str(bus['BUS'])
+                            temp = busesDic.get(bus_name, [])
+                            if len(temp) != 0:
+                                dato = temp[i]
+                                dato = str('{0:.6f}'.format(dato))
+                                layerMV.changeAttributeValue(bus.id(), Idx_MV, dato)
+                            else:
+                                layerMV.changeAttributeValue(bus.id(), Idx_MV, None)
+                                
                         except:
                             pass
                           
                 # write attribute values on LV shape
-                if capsLV & QgsVectorDataProvider.ChangeAttributeValues:
+                if (QgsVectorDataProvider.ChangeAttributeValues
+                    and bt_layer is True):
                     for bus in LV:
                         try:
-                            bus_name = str( bus['BUS'] )
-                            dato = busesDic[ bus_name ][ i ]
-                            dato = str( '{0:.6f}'.format( dato ) )
-                            layerLV.changeAttributeValue( bus.id(), Idx_LV, dato )
+                            bus_name = str(bus['BUS'])
+                            temp = busesDic.get(bus_name, [])
+                            if len(temp) != 0:
+                                dato = temp[i]
+                                dato = str('{0:.6f}'.format(dato))
+                                layerLV.changeAttributeValue(bus.id(), Idx_LV, dato)
+                            else:
+                                layerLV.changeAttributeValue(bus.id(), Idx_LV, None)
+                            
                         except:
                             pass
             except:
                 exc_info = sys.exc_info()
-                print("\nError: ", exc_info )
+                print("\nError: ", exc_info)
                 print("*************************  Información detallada del error ********************")
                 
                 
@@ -562,17 +580,17 @@ def WriteBusVolts(self, busesDic, name_file_created, study):
                     print(tb)        
         
         layerMV.commitChanges()
-        layerLV.commitChanges()
+        if bt_layer is True:
+            layerLV.commitChanges()
         return
     except IndexError:  # no layer encountered
         QgsMessageLog.logMessage('No existe capa de buses', QCoreApplication.translate('dialog', 'Alerta Buses'),
                                  QgsMessageLog.WARNING)
     except:
         exc_info = sys.exc_info()
-        print("\nError: ", exc_info )
+        print("\nError: ", exc_info)
         print("*************************  Información detallada del error ********************")
-        
-        
+
         for tb in traceback.format_tb(sys.exc_info()[2]):
             print(tb)      
         
@@ -600,12 +618,12 @@ Valores retornados
 *list_layersLinesLV (list): lista con los nombres de las capas de las líneas de media tensión
 """
 
-def get_layersnames( name_output_azul ):
+def get_layersnames(name_output_azul):
     list_layersTrafos = []
     list_layersLinesMV = []
     list_layersLinesLV = []
     
-    with open( name_output_azul, "r" ) as f:
+    with open(name_output_azul, "r") as f:
         lines = f.readlines()
         
     for line in lines:
@@ -614,20 +632,26 @@ def get_layersnames( name_output_azul ):
         if in_linesmv != -1: #si encontró la frase anterior entra al if
             in_linesmv += len("Layers LinesMV: ")
             fin_linesmv = line.find("\n", in_linesmv)
-            layers_lines_mv = line[in_linesmv:fin_linesmv]
+            if fin_linesmv == -1:
+                layers_lines_mv = line[in_linesmv:]
+            else:
+                layers_lines_mv = line[in_linesmv:fin_linesmv]
             if layers_lines_mv != "": #si existía alguna capa de líneas de mt
                 list_layersLinesMV = layers_lines_mv.split(",")
-                list_layersLinesMV = list( filter(None, list_layersLinesMV) ) #se eliminan los espacios en blanco en la lista
+                list_layersLinesMV = list(filter(None, list_layersLinesMV)) #se eliminan los espacios en blanco en la lista
         
         #Búsqueda de nombres de capas de líneas baja tensión
         in_lineslv = line.find("Layers LinesLV: ")
         if in_lineslv != -1: #si encontró la frase anterior entra al if
             in_lineslv += len("Layers LinesLV: ")
             fin_lineslv = line.find("\n", in_lineslv)
-            layers_lines_lv = line[in_lineslv:fin_lineslv]
+            if fin_lineslv == -1:
+                layers_lines_lv = line[in_linesmv:]
+            else:
+                layers_lines_lv = line[in_linesmv:fin_linesmv]
             if layers_lines_lv != "": #si existía alguna capa de líneas de bt
                 list_layersLinesLV = layers_lines_lv.split(",")
-                list_layersLinesLV = list( filter(None, list_layersLinesLV) ) #se eliminan los espacios en blanco en la lista
+                list_layersLinesLV = list(filter(None, list_layersLinesLV)) #se eliminan los espacios en blanco en la lista
         
         #Búsqueda de nombres de capas de transformadores
         in_transformers = line.find("Layers Transformers: ")
@@ -637,7 +661,7 @@ def get_layersnames( name_output_azul ):
             layers_transformers = line[in_transformers:fin_transformers]
             if layers_transformers != "": #si existía alguna capa de transformadores
                 list_layersTrafos = layers_transformers.split(",")
-                list_layersTrafos = list( filter(None, list_layersTrafos) ) #se eliminan los espacios en blanco en la lista
+                list_layersTrafos = list(filter(None, list_layersTrafos)) #se eliminan los espacios en blanco en la lista
     
     return list_layersTrafos, list_layersLinesMV, list_layersLinesLV
 
@@ -678,7 +702,7 @@ def lineCurrents(self, DSScircuit, lineNames, normalAmpsDic, study):  # lineCurr
     for name in lineNames:        
         DSScircuit.SetActiveElement('line.' + name)
         lineAmps = DSScircuit.ActiveCktElement.CurrentsMagAng  # read line currents
-        meanCurrent = '{0:.6f}'.format(  # calculate mean current
+        meanCurrent = '{0:.6f}'.format( # calculate mean current
             np.max([lineAmps[x] for x in range(0, len(lineAmps), 2)]) / normalAmpsDic[str(name.upper())])
         currentList.append(meanCurrent)
        
@@ -704,7 +728,7 @@ def lineCurrentsResults(self, lineNames, currentList, study, list_layersLinesMV,
                 # DSS object current
                 for line in lineFeat:                
                     layer.changeAttributeValue(line.id(), Idx, str(currentList[i][j]))  # id, Index, Value
-                    if j == len( currentList[i] ) - 1:                    
+                    if j == len(currentList[i]) - 1:                    
                         break #si currentList y lineFeat difieren de tamaño debe terminar el ciclo                
                     j += 1
         layer.commitChanges()
@@ -714,7 +738,6 @@ def lineCurrentsResults(self, lineNames, currentList, study, list_layersLinesMV,
 
 #Función que crea un vector con todos los trafos y los resultados de las simulaciones
 def ReadTrafosLoad(self, DSScircuit, DSStext, name_file_created):  # transformers overload writing
-    
     trafosDict = {}
     trafosNames = list(DSScircuit.Transformers.AllNames)
 
@@ -731,10 +754,10 @@ def ReadTrafosLoad(self, DSScircuit, DSStext, name_file_created):  # transformer
                 trafosNames.remove(str(name).split('_')[0] + '_3_' + str(name).split('_')[2])
             except ValueError:
                 pass
-    
+    n_trafos = DSScircuit.Transformers.Count
     DSScircuit.Transformers.First
     nextTx = 1
-    while nextTx != 0:  # results writing by transformer
+    while nextTx != 0 and n_trafos!= 0:  # results writing by transformer
         temp = 0
         trafo = DSScircuit.Transformers.Name  # get transformer name
         trafo = str(trafo).upper()
@@ -786,7 +809,7 @@ def WriteTrafosLoad(self, trafosDict, trafosNames, study, list_layersTrafos):  #
         elif study == 'daily':
             lim = 96
         
-        for i in range( lim ):  # results writing        
+        for i in range(lim):  # results writing        
             if study == 'snapshot':
                 name = 'PFsnap'
             elif study == 'daily':
@@ -797,8 +820,14 @@ def WriteTrafosLoad(self, trafosDict, trafosNames, study, list_layersTrafos):  #
                 Tx = layerTx.getFeatures()
                 for txs in Tx:
                     nameTx = str(txs['DSSName'])
-                    dato = str('{0:.6f}'.format(trafosDict[nameTx][i]))               
-                    layerTx.changeAttributeValue(txs.id(), Idx, dato)  # writing attribute value on shape
+                    temp = trafosDict.get(nameTx, [])
+                    if len(temp) != 0:
+                        dato = temp[i]
+                        dato = str('{0:.6f}'.format(dato))
+                        layerTx.changeAttributeValue(txs.id(), Idx, dato)
+                    else:
+                        layerTx.changeAttributeValue(txs.id(), Idx, None)     
+                    
         layerTx.commitChanges()
         layerTx.updateFields()
         
@@ -808,33 +837,31 @@ def selection_representative_day(file_path, type_day):
     # routine to select the most representative year on the year
     ############################################################################################    
     try:
-        print( "file_path, type_day = ", file_path, ", ", type_day)
+        print("file_path, type_day = ", file_path, ", ", type_day)
         with open(file_path, 'rt') as workbook:
             
             reader = csv.reader(workbook)  # read csv file
             next(reader)
             circuit_demand = [[row[3], row[2], row[0], row[1]] for row in reader]
             year = int((circuit_demand[0][0]).split('/')[2]);
-        
             d1 = datetime.datetime(year, 1, 1)
             d2 = datetime.datetime(year, 12, 31)
             no_days = (d2 - d1).days + 1            
-            
-            num_zeros = ( int(len(circuit_demand) / no_days), no_days)           
-            DP_to_be_matched = np.zeros( num_zeros )
-            DQ_to_be_matched = np.zeros( num_zeros )
+            num_zeros = (int(len(circuit_demand) / no_days), no_days)           
+            DP_to_be_matched = np.zeros(num_zeros)
+            DQ_to_be_matched = np.zeros(num_zeros)
             type_of_day = np.zeros((1, no_days))
             date_monitored = np.zeros((3, no_days))
-
             weekend_days = []
-            for i in range( int(no_days) ):
+            for i in range(int(no_days)):
+                temp = int(i * int(len(circuit_demand) / no_days))
                 type_of_day[0][i] = datetime.date(
-                    int((circuit_demand[int(i * int(len(circuit_demand) / no_days))][0]).split('/')[2]),
-                    int((circuit_demand[int(i * int(len(circuit_demand) / no_days))][0]).split('/')[1]),
-                    int((circuit_demand[int(i * int(len(circuit_demand) / no_days))][0]).split('/')[0])).weekday()
-                date_monitored[0][i] = int((circuit_demand[int(i * int(len(circuit_demand) / no_days))][0]).split('/')[2])
-                date_monitored[1][i] = int((circuit_demand[int(i * int(len(circuit_demand) / no_days))][0]).split('/')[1])
-                date_monitored[2][i] = int((circuit_demand[int(i * int(len(circuit_demand) / no_days))][0]).split('/')[0])
+                    int((circuit_demand[temp][0]).split('/')[2]),
+                    int((circuit_demand[temp][0]).split('/')[1]),
+                    int((circuit_demand[temp][0]).split('/')[0])).weekday()
+                date_monitored[0][i] = int((circuit_demand[temp][0]).split('/')[2])
+                date_monitored[1][i] = int((circuit_demand[temp][0]).split('/')[1])
+                date_monitored[2][i] = int((circuit_demand[temp][0]).split('/')[0])
                 if type_of_day[0][i] > 4:
                     weekend_days.append(i)
                 for j in range(int(len(circuit_demand) / no_days)):
@@ -875,7 +902,7 @@ def selection_representative_day(file_path, type_day):
     except:
         workbook.closed        
         exc_info = sys.exc_info()
-        print("\nError: ", exc_info )
+        print("\nError: ", exc_info)
         print("*************************  Información detallada del error ********************")
         
         for tb in traceback.format_tb(sys.exc_info()[2]):
@@ -923,7 +950,7 @@ def PV_allocation(total_capacity, pv_information, name_file_created, loadClass, 
             probDict[float(reader[n][0])] = [float(reader[n][1]), float(reader[n][2])]
         except ValueError:
             exc_info = sys.exc_info()
-            print("\nError: ", exc_info )
+            print("\nError: ", exc_info)
             print("*************************  Información detallada del error ********************")
             
             for tb in traceback.format_tb(sys.exc_info()[2]):
