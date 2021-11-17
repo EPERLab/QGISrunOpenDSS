@@ -952,6 +952,7 @@ class QGISrunOpenDSS(object):
             # Instalación libreria
             sentencia = dir_origen + "python.exe -m pip install " + library_name
             x = subprocess.call(sentencia, cwd=dir_destino, shell=True)
+            print("x = ", x)
             print("Instalación de librería ", library_name, " finalizada.")
             return 1
         except Exception:
