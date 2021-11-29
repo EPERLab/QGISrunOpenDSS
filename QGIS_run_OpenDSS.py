@@ -55,6 +55,7 @@ from .ves_gui import GUI_Ves
 from .gd_gui import GUI_Gd
 import datetime
 import matplotlib.dates as mdates
+import subprocess
 
 from PyQt5.QtCore import *
 from PyQt5 import QtCore 
@@ -973,7 +974,6 @@ class QGISrunOpenDSS(object):
             # Instalación libreria
             sentencia = dir_origen + "python.exe -m pip install " + library_name
             x = subprocess.call(sentencia, cwd=dir_destino, shell=True)
-            print("x = ", x)
 
             print("Instalación de librería ", library_name, " finalizada.")
             return 1
@@ -1687,10 +1687,14 @@ class QGISrunOpenDSS(object):
             import pandas
             if pandas.__version__ != '1.1.3':
                 self.install_libraries("pandas --upgrade")
-                self.install_libraries("openpyxl")
         except:
             self.install_libraries("pandas")
-            
+
+        #Instalación openpyxl
+        try:
+            import openpyxl
+        except:
+            self.install_libraries("openpyxl")
         import pandas
         print("Instalación de librerías finalizada")
      
