@@ -53,7 +53,7 @@ from .QGIS_run_OpenDSS_transformer import Ui_Transformer
 from .QGIS_run_OpenDSS_progress import Ui_Progress
 from .ves_gui import GUI_Ves
 from .gd_gui import GUI_Gd
-import datetime as dt
+import datetime
 import matplotlib.dates as mdates
 
 from PyQt5.QtCore import *
@@ -71,7 +71,6 @@ from .create_study_EVS import CreateEVDss #Para estudio random, por consumo o po
 from .EVsFunctions import CreateList_SOC_t, update_storage #Para crear lista de dssnames y t's
 from .AEBsFunctions import uncomment_lines, comment_lines
 from .correct_date_time import correct_date, correct_hour #para corregir la fecha y tiempo
-import subprocess
 
 QApplication.setStyle(QStyleFactory.create('WindowsVista')) # <- Choose the style
 
@@ -141,11 +140,14 @@ class QGISrunOpenDSS(object):
         self.dlg.powerflow_daily.toggled.connect(self.SLUenabler)
         self.dlg.powerflow_yearly.toggled.connect(self.SLUenabler)
         self.dlg.short_circuit.toggled.connect(self.SLUenabler)
-
+        
+        self.dlg.powerflow_daily.toggled.connect(self.DailyLossesReportEnabler)
+        
         self.dlg.SCMVA.toggled.connect(self.scPowerAmps)
         self.dlg.SCkA.toggled.connect(self.scPowerAmps)
 
         self.SLUenabler()
+        self.DailyLossesReportEnabler()
         
 
         self.dlg.lineEdit_snapshot_date.clear()
@@ -394,6 +396,10 @@ class QGISrunOpenDSS(object):
             self.dlg.checkBoxLosses.setEnabled(False)
             self.dlg.checkBoxUnbalance.setEnabled(False)
             self.dlg.checkBox_capas.setEnabled(False)
+    
+    def DailyLossesReportEnabler(self):
+        if self.dlg.powerflow_daily.isChecked():
+            self.dlg.checkBoxLosses_Report.setEnabled(True)
 
 
     #=======================================================================================================
@@ -435,6 +441,7 @@ class QGISrunOpenDSS(object):
     def change_check_snapshot_powerflow(self):
         if self.dlg.powerflow_snapshot.isChecked():
             self.dlg.powerflow_daily.setChecked(False)
+            self.dlg.checkBoxLosses_Report.setChecked(False)
             self.dlg.powerflow_yearly.setChecked(False)
             self.dlg.short_circuit.setChecked(False)
             self.dlg.harmonics.setChecked(False)
@@ -457,6 +464,7 @@ class QGISrunOpenDSS(object):
     def change_check_yearly_powerflow(self):
         if self.dlg.powerflow_yearly.isChecked():
             self.dlg.powerflow_daily.setChecked(False)
+            self.dlg.checkBoxLosses_Report.setChecked(False)
             self.dlg.powerflow_snapshot.setChecked(False)
             self.dlg.short_circuit.setChecked(False)
             self.dlg.harmonics.setChecked(False)
@@ -469,6 +477,7 @@ class QGISrunOpenDSS(object):
         if self.dlg.short_circuit.isChecked():
             self.dlg.powerflow_yearly.setChecked(False)
             self.dlg.powerflow_daily.setChecked(False)
+            self.dlg.checkBoxLosses_Report.setChecked(False)
             self.dlg.powerflow_snapshot.setChecked(False)
             self.dlg.harmonics.setChecked(False)
             self.dlg.daily.setChecked(False)
@@ -480,6 +489,7 @@ class QGISrunOpenDSS(object):
         if self.dlg.harmonics.isChecked():
             self.dlg.powerflow_yearly.setChecked(False)
             self.dlg.powerflow_daily.setChecked(False)
+            self.dlg.checkBoxLosses_Report.setChecked(False)
             self.dlg.powerflow_snapshot.setChecked(False)
             self.dlg.daily.setChecked(False)
             self.dlg.snapshot.setChecked(True)#por defecto estará habilitado el análisis de armónicos instantáneo
@@ -491,6 +501,7 @@ class QGISrunOpenDSS(object):
         if self.dlg.snapshot.isChecked():
             self.dlg.powerflow_yearly.setChecked(False)
             self.dlg.powerflow_daily.setChecked(False)
+            self.dlg.checkBoxLosses_Report.setChecked(False)
             self.dlg.powerflow_snapshot.setChecked(False)
             self.dlg.daily.setChecked(False)
             self.dlg.short_circuit.setChecked(False)
@@ -501,6 +512,7 @@ class QGISrunOpenDSS(object):
         if self.dlg.daily.isChecked():
             self.dlg.powerflow_yearly.setChecked(False)
             self.dlg.powerflow_daily.setChecked(False)
+            self.dlg.checkBoxLosses_Report.setChecked(False)
             self.dlg.powerflow_snapshot.setChecked(False)
             self.dlg.snapshot.setChecked(False)
             self.dlg.short_circuit.setChecked(False)
@@ -768,7 +780,7 @@ class QGISrunOpenDSS(object):
                                 self.transformer.comboBox_tap_location.setCurrentIndex(0)
                             else:
                                 self.transformer.comboBox_tap_location.setCurrentIndex(1)
-                    self.dlg.transformer_modelling.setTirtle(QCoreApplication.translate('dialog',
+                    self.dlg.transformer_modelling.setTitle(QCoreApplication.translate('dialog',
                                                                                        u'Transformador principal'))
                     self.dlg.transformer_modelling.setEnabled(True)
                 elif "NOMODEL" in lines[0]: # substation empty model
@@ -827,8 +839,6 @@ class QGISrunOpenDSS(object):
                 for i in lines:
                     #print i
                     if mainBus in i:
-                        
-                        
                         line = i.split(" ")[1].replace('line.', '')
                         
                 if line == '':
@@ -836,6 +846,7 @@ class QGISrunOpenDSS(object):
                                             QCoreApplication.translate('dialog',
                                                                      u"Verificar conexión de subestación"))
                 break
+        print(line)
         return line
 
     def tr(self, message):
@@ -903,17 +914,21 @@ class QGISrunOpenDSS(object):
             dst = os.path.join(dst, os.path.basename(src))
         shutil.copyfile(src, dst)
     
-    """
-    Función que se encarga de instalar una librería en la versión de python de QGIS
-    -Parámetros de entrada:
-    *library_name (string): nombre de la librería a instalar (tal como se le debe pasar a pip)
-    
-    -Valores retornados:
-    *1 en caso de finalizar exitosamente
-    *0 en caso de ocurrir algún error
-    """
-    
+         
     def install_libraries(self, library_name):
+    
+        """
+        Función que se encarga de instalar una librería en
+        la versión de python de QGIS
+        -Parámetros de entrada:
+        *library_name (string): nombre de la librería a instalar
+        (tal como se le debe pasar a pip)
+
+        -Valores retornados:
+        *1 en caso de finalizar exitosamente
+        *0 en caso de ocurrir algún error
+        """
+        
         try:
             # Se obtiene el path de QGIS
             directorio = str(os.path)
@@ -929,36 +944,43 @@ class QGISrunOpenDSS(object):
             verspy2 = str(info[1])
             carp_python = verspy1 + verspy2
             carp_python = "Python" + carp_python
+
             # Se copia los archivos
             dir_origen = path + "/bin/"
             name_file_or = "python" + verspy1 + ".dll"
             archivo_origen = str(dir_origen + name_file_or)
             dir_destino = path + "/apps/" + carp_python
             name_dest = dir_destino + "/" + name_file_or
+
             if os.path.exists(name_dest) is False:
                 # Copia python3.dll
                 self.copy(archivo_origen, dir_destino)
+
             # Copia python37.dll
             name_file_or = "python" + verspy1 + verspy2 + ".dll"
             archivo_origen = dir_origen + name_file_or
             name_dest = dir_destino + "/" + name_file_or
+
             if os.path.exists(name_dest) is False:
                 # Copia python37.dll
                 self.copy(archivo_origen, dir_destino)
+
             # Instalación de librerías
             # Actualización de pip
             sentencia = dir_origen + 'python.exe -m pip install –upgrade pip'
             subprocess.call(sentencia, cwd=dir_destino, shell=True)
+
             # Instalación libreria
             sentencia = dir_origen + "python.exe -m pip install " + library_name
             x = subprocess.call(sentencia, cwd=dir_destino, shell=True)
             print("x = ", x)
+
             print("Instalación de librería ", library_name, " finalizada.")
             return 1
+
         except Exception:
             self.print_error()
             return 0
-
 
     """
     Función encargada de graficar las tensiones en una simulación instantánea. Se utiliza la librería de matplotlib.
@@ -1596,7 +1618,7 @@ class QGISrunOpenDSS(object):
             
             for i in range(len(index)):
                 dato = str(index[i]).upper()
-                if 'AFTERMETER' not in dato:
+                if 'AFTERMETER' not in dato:#ESTO CREO QUE SE PUEDE BORRAR
                     all_buses_list.append(all_buses[i])
                     index_list.append(index[i])
                     
@@ -1616,6 +1638,31 @@ class QGISrunOpenDSS(object):
             Base_V.to_csv('bases.csv')
             return Base_V
             #End simulation to get bases
+    
+    def Group_Asociation(self, tx_info, lines_info, loads_info):
+        group_dict = {}
+        
+        #Primero, los transformadores
+        for idx in tx_info.index:
+            group_dict[str(tx_info.loc[idx,'GROUP_LV'])] = {}
+            group_dict[str(tx_info.loc[idx,'GROUP_LV'])]['Transformer'] = tx_info.loc[idx,'DSS_NAME']
+            group_dict[str(tx_info.loc[idx,'GROUP_LV'])]['Lines'] = []
+            group_dict[str(tx_info.loc[idx,'GROUP_LV'])]['Loads'] = []
+        
+        
+        for idx in lines_info.index:
+            try:
+                group_dict[str(lines_info.loc[idx,'GROUP_LV'])]['Lines'].append(lines_info.loc[idx,'DSS_NAME'])
+            except:
+                pass
+        
+        for idx in loads_info.index:
+            try:
+                group_dict[str(loads_info.loc[idx,'GROUP_LV'])]['Loads'].append(loads_info.loc[idx,'DSS_NAME'])
+            except:
+                pass
+            
+        return group_dict
 
     
     ##################################################
@@ -1625,7 +1672,6 @@ class QGISrunOpenDSS(object):
     ##################################################
     
     def run(self):
-        import pandas
         plt.close('all')
         #Install the required libraries
         #Instalación comtypes
@@ -1637,6 +1683,15 @@ class QGISrunOpenDSS(object):
             import comtypes.client as cc
             
         #Instalación pandas
+        try:
+            import pandas
+            if pandas.__version__ != '1.1.3':
+                self.install_libraries("pandas --upgrade")
+                self.install_libraries("openpyxl")
+        except:
+            self.install_libraries("pandas")
+            
+        import pandas
         print("Instalación de librerías finalizada")
      
         #Se debe poner aquí porque utiliza pandas
@@ -1685,7 +1740,7 @@ class QGISrunOpenDSS(object):
             for file in files_names:
                 if len(file.split('\\')[1].split('.')[0].split('_'))> 1:
                     if file.split('\\')[1].split('.')[0].split('_')[1] == 'OutputQGIS2OpenDSS':
-                        name_file_created = file.split('\\')[1].split('.')[0]
+                        name_file_created = file.split('\\')[1].split('.')[0] #OutputQGIS2OpenDSS
     
             # Combo_Fill_Short_circuit
             try:
@@ -1960,6 +2015,7 @@ class QGISrunOpenDSS(object):
                     vector_soc_t = CreateEVDss(name_lvloads, study_type, percent_evs, self.circuitName, name_output_azul, vector_soc_t, name_dss_evshape, list_prob = list_prob )
                     if vector_soc_t == 0:
                         return
+                
                 # Transformer data
                 line_tx_definition = ''
                 if self.dlg.transformer_modelling.isChecked():
@@ -2140,135 +2196,13 @@ class QGISrunOpenDSS(object):
                 
                 [DSSobj, DSSstart, DSStext, DSScircuit,
                  DSSprogress] = auxfcns.SetUpCOMInterface() # Inicializacion de la interfaz COM de OpenDSS
-                 
-                with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV.dss', 'r+') as f:   #save file's original settings
-                        original_lines = f.readlines()
-                        f.close
     
                 # Master.dss file creation
                 created_files = open(dir_network + '/' + name_file_created + '.dss', 'r')
                 created_files = created_files.read()
                 if tx_active is False:
-                    created_files = created_files.replace(name_file_created.split('_')[0] + '_LinesMV',
-                                                          name_file_created.split('_')[0] + '_LinesMV_mod')
                     created_files = created_files.replace('redirect ' + name_file_created.split('_')[0] + '_Substation.dss', '')
-                    firstLine = 'MV3P' + name_file_created.split('_')[0] + '00'
-                    
-                    with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_mod.dss', 'w') as the_file:
-                            lines = copy.deepcopy(original_lines)
-                            lines.insert(0,'new line.' + firstLine + ' bus1=Sourcebus bus2=AFTERMETER r1=0.00001 x1=0.00001 length=0.0001 units=m \n')
-                            the_file.seek(0)
-                                
-                            for line_num in range(1,len(lines)):
-                                whole_line = lines[line_num].split(' ')
-                                bus1 = lines[line_num].split(' ')[2]
-                                bus2 = lines[line_num].split(' ')[3]
-                                
-                                if bus1.split('=')[1].split('.')[0].split(name_file_created.split('_')[0])[1] == '1':
-                                    lines[line_num] = ''
-                                    for elem in range(len(whole_line)):
-                                        if elem == 2: #campo del bus 1
-                                            lines[line_num] = lines[line_num] + 'bus1=AFTERMETER '
-                                        elif elem == len(whole_line)-1:
-                                            lines[line_num] = lines[line_num] +  whole_line[elem]
-                                        else:
-                                            lines[line_num] = lines[line_num] + whole_line[elem] + ' '
-                                
-                                elif bus2.split('=')[1].split('.')[0].split(name_file_created.split('_')[0])[1] == '1':
-                                    lines[line_num] = ''
-                                    for elem in range(len(whole_line)):
-                                        if elem == 3: #campo del bus 1
-                                            lines[line_num] = lines[line_num] + 'bus2=AFTERMETER '
-                                        elif elem == len(whole_line)-1:
-                                            lines[line_num] = lines[line_num] +  whole_line[elem]
-                                        else:
-                                            lines[line_num] = lines[line_num] + whole_line[elem] + ' '
-                           
-                            the_file.writelines(lines)
-                            
-                            the_file.close
-                    
-                elif (tx_active is True) and (self.dlg.powerflow_snapshot.isChecked()or self.dlg.powerflow_daily.isChecked()):
-                    if self.dlg.powerflow_snapshot.isChecked():
-                    
-                        with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_snap.dss', 'w')as the_file:
-                            lines = copy.deepcopy(original_lines)
-                            lines.insert(0,'new line.MV3P'+name_file_created.split('_')[0]+'00 bus1=BUSMV'+name_file_created.split('_')[0]+'1.1.2.3 bus2=AFTERMETER r1=0.00001 x1=0.00001 length=0.0001 units=m \n')
-                            the_file.seek(0)
-                                
-                            for line_num in range(1,len(lines)):
-                                whole_line = lines[line_num].split(' ')
-                                bus1 = lines[line_num].split(' ')[2]
-                                bus2 = lines[line_num].split(' ')[3]
-                                
-                                if bus1.split('=')[1].split('.')[0].split(name_file_created.split('_')[0])[1] == '1':
-                                    lines[line_num] = ''
-                                    for elem in range(len(whole_line)):
-                                        if elem == 2: #campo del bus 1
-                                            lines[line_num] = lines[line_num] + 'bus1=AFTERMETER '
-                                        elif elem == len(whole_line)-1:
-                                            lines[line_num] = lines[line_num] +  whole_line[elem]
-                                        else:
-                                            lines[line_num] = lines[line_num] + whole_line[elem] + ' '
-                                
-                                elif bus2.split('=')[1].split('.')[0].split(name_file_created.split('_')[0])[1] == '1':
-                                    lines[line_num] = ''
-                                    for elem in range(len(whole_line)):
-                                        if elem == 3: #campo del bus 1
-                                            lines[line_num] = lines[line_num] + 'bus2=AFTERMETER '
-                                        elif elem == len(whole_line)-1:
-                                            lines[line_num] = lines[line_num] +  whole_line[elem]
-                                        else:
-                                            lines[line_num] = lines[line_num] + whole_line[elem] + ' '
-                           
-                            the_file.writelines(lines)
-                            
-                            the_file.close
-                            
-                        created_files = created_files.replace(name_file_created.split('_')[0] + '_LinesMV',
-                                                          name_file_created.split('_')[0] + '_LinesMV_snap')
-                    
-                    elif self.dlg.powerflow_daily.isChecked():
-                    
-                        with open(dir_network + '/' + name_file_created.split('_')[0] + '_LinesMV_daily.dss', 'w')as the_file:
-                            lines = copy.deepcopy(original_lines)
-                            lines.insert(0,'new line.MV3P'+name_file_created.split('_')[0]+'00 bus1=BUSMV'+name_file_created.split('_')[0]+'1.1.2.3 bus2=AFTERMETER r1=0.00001 x1=0.00001 length=0.0001 units=m \n')
-                            the_file.seek(0)
-                                
-                            for line_num in range(1,len(lines)):
-                                whole_line = lines[line_num].split(' ')
-                                bus1 = lines[line_num].split(' ')[2]
-                                bus2 = lines[line_num].split(' ')[3]
-                                
-                                if bus1.split('=')[1].split('.')[0].split(name_file_created.split('_')[0])[1] == '1':
-                                    lines[line_num] = ''
-                                    for elem in range(len(whole_line)):
-                                        if elem == 2: #campo del bus 1
-                                            lines[line_num] = lines[line_num] + 'bus1=AFTERMETER '
-                                        elif elem == len(whole_line)-1:
-                                            lines[line_num] = lines[line_num] +  whole_line[elem]
-                                        else:
-                                            lines[line_num] = lines[line_num] + whole_line[elem] + ' '
-                                
-                                elif bus2.split('=')[1].split('.')[0].split(name_file_created.split('_')[0])[1] == '1':
-                                    lines[line_num] = ''
-                                    for elem in range(len(whole_line)):
-                                        if elem == 3: #campo del bus 1
-                                            lines[line_num] = lines[line_num] + 'bus2=AFTERMETER '
-                                        elif elem == len(whole_line)-1:
-                                            lines[line_num] = lines[line_num] +  whole_line[elem]
-                                        else:
-                                            lines[line_num] = lines[line_num] + whole_line[elem] + ' '
-                           
-                            the_file.writelines(lines)
-                            
-                            the_file.close
-                            
-                        created_files = created_files.replace(name_file_created.split('_')[0] + '_LinesMV',
-                                                          name_file_created.split('_')[0] + '_LinesMV_daily')
-                
-                
-                
+                                  
                 file = open(dir_network + '/Master.dss', 'w')
                 file.write('set defaultbasefrequency=' + frequency + '\n')
                 source_voltage = self.dlg.lineEdit_sourcevoltage.text()
@@ -2404,8 +2338,10 @@ class QGISrunOpenDSS(object):
                         # distributed generators powers
                         gen_powers = np.zeros(1)
                         gen_rpowers = np.zeros(1)
+                        loadsNames = DSScircuit.Loads.AllNames
                         GenNames = DSScircuit.Generators.AllNames
                         PVNames = DSScircuit.PVSystems.AllNames
+                        #Generadores
                         if GenNames[0] != 'NONE':
                             for i in GenNames: # extract power from generators
                                 DSScircuit.setActiveElement('generator.' + i)
@@ -2415,6 +2351,7 @@ class QGISrunOpenDSS(object):
                                     gen_q += -p[w + 1] # Q
                             gen_powers[0] += gen_p
                             gen_rpowers[0] += gen_q
+                        #PVs
                         if PVNames[0] != 'NONE':
                             for i in PVNames: # extract power from PVSystems
                                 DSScircuit.setActiveElement('PVSystem.' + i)
@@ -2424,6 +2361,22 @@ class QGISrunOpenDSS(object):
                                     gen_q += -p[w + 1] # Q
                             gen_powers[0] += gen_p
                             gen_rpowers[0] += gen_q
+                        
+                        # Cargas AMI
+                        if loadsNames[0] != 'NONE':
+                            ami_p = 0
+                            ami_q = 0
+                            for i in loadsNames:  # extract power from existing loads
+                                if "_a" in str(i): #Etiqueta AMI
+                                    DSScircuit.setActiveElement('load.' + i)
+                                    p = DSScircuit.ActiveElement.Powers
+                                    for w in range(0, len(p), 2):
+                                        ami_p += -p[w]
+                                        ami_q += -p[w+1]
+                                #print("i = ", t, " P = ", ami_p, " Q = ", ami_q)
+                            
+                            gen_powers[0] += ami_p
+                            gen_rpowers[0] += ami_q
 
                         #DSStext.Command = 'batchedit storage..* enabled = no' # No storage simulation
                         # load allocation algorithm
@@ -2445,9 +2398,16 @@ class QGISrunOpenDSS(object):
                         DSStext.Command = 'clear'
                         DSStext.Command = 'New Circuit.Circuito_Distribucion_Snapshot'
                         
-                        DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compile the OpenDSS Master file
+                        # ONLY for this case it's necessary not to take into account the EnergyMeters. There must be just one at the beginning.
+                        fp = open(dir_network + '/Master.dss')
+                        lines = fp.readlines()
+                        for s_line in lines:
+                            if len(s_line)>1 and '_EnergyMeters.dss' not in s_line:
+                                DSStext.Command = s_line[:-1] #quita el /n
+                        
                         if plantel is True: #se agregan los buses si hay un archivo del plantel de buses
                             DSStext.Command = 'redirect ' + str(name_file_created.split('_')[0])+  '_StorageBuses.dss'
+                        
                         DSStext.Command = 'New Energymeter.Sub line.' + firstLine #Energymeter in the substation. It allows to perform the voltage profile plot
                         DSStext.Command = 'Set mode=daily'  # Type of Simulation
                         DSStext.Command = 'Set number=1'  # Number of steps to be simulated
@@ -2655,11 +2615,6 @@ class QGISrunOpenDSS(object):
                                                 QCoreApplication.translate('dialog',
                                                                            "Los archivos han sido guardados en: ")+ output_folder)
                     
-                    with open(dir_network + '\\' + circuit_name + '_LinesMV.dss', 'r+') as the_file:   #save file's original settings
-                        the_file.truncate(0)
-                        the_file.writelines(original_lines)
-                        the_file.close
-                    
                     os.system('clear')
     
                 # ##############################################
@@ -2670,7 +2625,7 @@ class QGISrunOpenDSS(object):
                     DSSprogress.Show()
                     DSSprogress.Caption = QCoreApplication.translate('progress', u'Daily')
                     DSSprogress.PctProgress = 0
-                    
+                                                                        
                     tinitial_daily = time.time() # daily time start
                     dailydate = self.dlg.lineEdit_daily_date.text().upper() # simulation date
                     dailydate = correct_date(load_curve_circuit, dailydate)
@@ -2678,7 +2633,13 @@ class QGISrunOpenDSS(object):
                     if not dailydate:  # representative day selection routine
                         dailydate = auxfcns.selection_representative_day(load_curve_circuit, 'weekday')
                     self.dailydate = dailydate
-    
+                    
+                    #Variables para habilitar el análisis de pérdidas
+                    losses_report = False
+                    if self.dlg.checkBoxLosses_Report.isChecked():
+                        losses_report = True
+                        
+                    
                     SabcMC = []
                     DP_to_be_matched = []  # Real P
                     DQ_to_be_matched = []  # Real Q
@@ -2688,9 +2649,6 @@ class QGISrunOpenDSS(object):
                             DP_to_be_matched.append(circuit_demand[ij][2])
                             DQ_to_be_matched.append(circuit_demand[ij][3])
                             
-                    if self.substation_sel is True:
-                        circuit_name = name_file_created.split('_')[0]
-                        firstLine = 'MV3P' + circuit_name + '00'
                      # #### FIRST SIMULATION: SNAPSHOT TO GET LN VOLTAGE BASES
                     Base_V = self.simulation_to_get_bases(dir_network, firstLine, DSStext, DSScircuit)
                     
@@ -2742,24 +2700,26 @@ class QGISrunOpenDSS(object):
                                     pv_q += -p[w + 1]
                             gen_powers[t] += pv_p
                             gen_rpowers[t] += pv_q
-                        """
+                        
                         # Cargas AMI
                         if loadsNames[0] != 'NONE':
                             ami_p = 0
                             ami_q = 0
                             for i in loadsNames:  # extract power from existing loads
-                                if "_a" not in str(i):
-                                    continue
-                                DSScircuit.setActiveElement('load.' + i)
-                                p = DSScircuit.ActiveElement.Powers
-                                for w in range(0, len(p), 2):
-                                    ami_p += -p[w]
-                                    ami_q += -p[w+1]
-                            print("i = ", t, " P = ", ami_p, " Q = ", ami_q)
+                                if "_a" in str(i): #Etiqueta AMI
+                                    DSScircuit.setActiveElement('load.' + i)
+                                    p = DSScircuit.ActiveElement.Powers
+                                    for w in range(0, len(p), 2):
+                                        ami_p += -p[w]
+                                        ami_q += -p[w+1]
+                                
+                                #print("i = ", t, " P = ", ami_p, " Q = ", ami_q)
                             
                             gen_powers[t] += ami_p
                             gen_rpowers[t] += ami_q
-                    """
+                        
+                        print(t)
+                    
     
                     DSSprogress.PctProgress = 20
                     errorP = 0.003  # Maximum desired correction error for active power
@@ -2788,6 +2748,7 @@ class QGISrunOpenDSS(object):
                     ################################################################
                     
                     DSScircuit.Monitors.ResetAll()
+                    DSScircuit.Meters.ResetAll()
                     # post load allocation simulation
                     DSStext.Command = 'clear'  # clean previous circuits
                     DSStext.Command = 'New Circuit.Circuito_Distribucion_Daily'  # create a new circuit
@@ -2796,7 +2757,7 @@ class QGISrunOpenDSS(object):
                         DSStext.Command = 'redirect ' + str(name_file_created.split('_')[0])+  '_StorageBuses.dss'
                     DSStext.Command = 'Set mode = daily'  # daily simulation mode
                     DSStext.Command = 'Set number= 1'  ## steps by solve
-                    DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 1m = 60s
+                    DSStext.Command = 'Set stepsize=15m'  # Stepsize of the simulation (se usa 15m)
                     DSStext.Command = 'Set time=(0,0)'  # Set the start simulation time
                     if tx_modelling and self.substation != 'Auto':
                         DSStext.Command = line_tx_definition
@@ -2840,6 +2801,17 @@ class QGISrunOpenDSS(object):
                     unbalance = {}
                     orderedUnbalance = OrderedDict()
                     
+                    #Inicialización de variables para el reporte de pérdidas en kW y en kWh
+                    if losses_report == True:
+                        tiempo_inicial = datetime.datetime.combine(datetime.date.today(), datetime.time(0, 0))
+                        delta_min = datetime.timedelta(minutes = 15)
+                        lista_minutos = [(tiempo_inicial + n*delta_min).time() for n in range(96)]
+                        Datos_Energia = {}
+                        
+                        #Datos de generación
+                        if DSScircuit.Generators.AllNames[0] != 'NONE':
+                            Datos_Generacion = pd.DataFrame(np.nan, index = [x for x in DSScircuit.Generators.AllNames], columns = lista_minutos)
+                    
                     ############################################
                     for t in range(96):                    
                         DSStext.Command = 'batchedit load.n_.* kW=' + str(kW_sim[t]) # set kW corrector
@@ -2864,12 +2836,21 @@ class QGISrunOpenDSS(object):
 
                         ###########################################################
                         
-                        if t == 0:  # set pu voltages
+                        if t == 0:  
+                        # set pu voltages
                             if self.lv_lines is True:
                                 DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_LV_KVBaseLN.dss'
                             if self.mv_lines is True:
                                 DSStext.Command = 'redirect ' + name_file_created.split('_')[0] + '_MV_BaseKV_LN.dss'
                             V_buses = pandas.DataFrame(np.nan, index=index_list, columns=[x for x in range(96)]) 
+                            
+                            if losses_report == True:
+                            
+                                for met in DSScircuit.Meters.AllNames: #Inicializa dataframe de energía
+                                    Datos_Energia[met] = pandas.DataFrame(np.nan, index= [x for x in DSScircuit.Meters.RegisterNames], columns=lista_minutos)
+                                
+                                #Inicializa dataframe de pérdidas en kW
+                                Datos_Perdidas = pandas.DataFrame(np.nan, columns=lista_minutos, index=[x for x in DSScircuit.AllElementNames])
                         
                         v_allbuses = np.array(all_buses)
                         v_base = np.array(Base_V['base'])
@@ -2906,7 +2887,20 @@ class QGISrunOpenDSS(object):
                         nodeVoltages_ph3.append([DSScircuit.AllNodeVmagPUByPhase(3)]) # Buses pu voltages ph3
                         
                         currentList.append(auxfcns.lineCurrents(self, DSScircuit, lineNames, normalAmpsDic, study)) ##Normalized currents
-                    
+                        
+                        if losses_report == True:
+                        
+                            #Guarda datos de pérdidas
+                            temp_losses = np.reshape(DSScircuit.AllElementLosses, (len(DSScircuit.AllElementNames),2))
+                            Datos_Perdidas.iloc[:,t] =  temp_losses.T[0]
+                            #Guarda datos de energy meters
+                            
+                            DSScircuit.Meters.SampleAll
+                            #Datos de consumo de energía
+                            for meter in DSScircuit.Meters.AllNames:
+                                DSScircuit.Meters.Name = meter
+                                temp_meter = DSScircuit.Meters.RegisterValues
+                                Datos_Energia[meter].iloc[:,t] = temp_meter
                     
                     #####################################
                     #Dato potencia en secundario del trafo
@@ -2963,7 +2957,7 @@ class QGISrunOpenDSS(object):
                     for MC_iteration in range(int(number_simulations)):
     
                         # Generate a series of dates (these are in matplotlib's internal date format)
-                        hours = mdates.drange(dt.datetime(2015, 1, 1), dt.datetime(2015, 1, 2), dt.timedelta(minutes=15))
+                        hours = mdates.drange(datetime.datetime(2015, 1, 1), datetime.datetime(2015, 1, 2), datetime.timedelta(minutes=15))
     
                         # Tell matplotlib to interpret the x-axis values as dates
                         fmtr = mdates.DateFormatter("%H:%M")
@@ -3134,10 +3128,259 @@ class QGISrunOpenDSS(object):
                                                 QCoreApplication.translate('dialog',
                                                                            "Los archivos han sido guardados en: ")+ output_folder)
                                                                            
-                    with open(dir_network + '\\' + circuit_name + '_LinesMV.dss', 'r+') as the_file:   #save file's original settings
-                        the_file.truncate(0)
-                        the_file.writelines(original_lines)
-                        the_file.close
+                    
+                    #%% Generación del reporte de pérdidas en excel
+                    if losses_report:
+                        #First, it's important to check if there is the required csv files from QGIS2OpenDSS to make the lvgroups
+                        if 'LinesLVList.csv' in glob.glob("*.csv") and 'TrafosList.csv' in glob.glob("*.csv") and 'LoadsLVList.csv' in glob.glob("*.csv"):
+                            LV_loss_analysis_flag = True
+                            
+                            #Información para la asignación de grupos
+                            lines_info = pandas.read_csv(dir_network+'\\LinesLVlist.csv')
+                            tx_info = pandas.read_csv(dir_network+'\\Trafoslist.csv')
+                            loads_info = pandas.read_csv(dir_network+'\\LoadsLVlist.csv')
+
+                            lv_groups_dict = self.Group_Asociation(tx_info , lines_info, loads_info)
+                    
+                        else:
+                            LV_loss_analysis_flag = False
+                            QMessageBox.information(None, QCoreApplication.translate('dialog', "Advertencia"), QCoreApplication.translate('dialog',
+                                                                                                   u'Uno de los archivos csv LinesLVList, TrafosLVList o LoadsLVList no están en la carpeta DSS para realizar los reportes de pérdidas, por lo tanto solo se hará el análisis en media tensión'))
+                     
+                        # Report generation on excel
+                        
+                        if not os.path.exists(dir_network+'\\Reportes_Pérdidas'):
+                            os.mkdir(dir_network+'\\Reportes_Pérdidas')
+                        
+                        ########################################################################################
+                        
+                        
+                        reporte_kWh = pandas.DataFrame(np.nan, index=[x for x in DSScircuit.Meters.AllNames], columns=['Energía Pasante kWh', 'Energía Pasante (% Total)', 'Pérdidas Totales kWh', 'Pérdidas Totales (% Total)', 'Pérdidas Variables kWh', 'Pérdidas Variables (% Total)', 'Pérdidas Fijas kWh', 'Pérdidas Fijas (% Total)', 'Pérdidas Líneas kWh', 'Pérdidas Líneas (% Total)', 'Pérdidas Transformador kWh', 'Pérdidas Transformador (% Total)'])
+
+                        kWh_generated = 0
+                        for meter in Datos_Energia:
+                            kWh_generated += Datos_Energia[meter].loc['Gen kWh', lista_minutos[-1]]
+                        
+                        kWh_total = kWh_generated + Datos_Energia['met_sub'].iloc[0,-1] #Valor de energía consumida en kWh en el día por todo el circuito
+
+                        for met in DSScircuit.Meters.AllNames:
+                            
+
+                            DSScircuit.Meters.Name = met
+                            
+                            #División de cargas monofásicas de 2 y 3 hilos:
+                            n1_loads_2hilos = [] 
+                            n1_loads_3hilos = []
+                            a1_loads_2hilos = [] 
+                            a1_loads_3hilos = []
+                                
+                                
+                            # Sin AMI:
+                            n1_loads = [x for x in DSScircuit.Meters.ZonePCE if x is not None and 'load.n_1' in x.lower()]
+                            
+                            for nload in n1_loads:
+                            
+                                DSScircuit.Loads.Name = nload.split('.')[1]
+                             
+                                if len(DSScircuit.ActiveElement.Properties('bus1').val.split('.')) == 2: # si solo tiene un nodo asociado es dos hilos (neutro no se cuenta)
+                                
+                                    n1_loads_2hilos.append(nload)
+                                
+                                elif len(DSScircuit.ActiveElement.Properties('bus1').val.split('.')) == 3:
+                                    
+                                    n1_loads_3hilos.append(nload)
+                            
+
+                            # Con AMI    
+                            a1_loads = [x for x in DSScircuit.Meters.ZonePCE if x is not None and 'load.a_1' in x.lower()]
+                            
+                            for aload in a1_loads:
+                            
+                                DSScircuit.Loads.Name = aload.split('.')[1]
+                                
+                                if len(DSScircuit.ActiveElement.Properties('bus1').val.split('.')) == 2: # si solo tiene un nodo asociado es dos hilos (neutro no se cuenta)
+                                
+                                    a1_loads_2hilos.append(aload)
+                                
+                                elif len(DSScircuit.ActiveElement.Properties('bus1').val.split('.')) == 3:
+                                    
+                                    a1_loads_3hilos.append(aload)
+                            
+                            n1_2h_loads_num = len(n1_loads_2hilos)
+                            n1_3h_loads_num = len(n1_loads_3hilos)
+                            n2_loads_num = len([x for x in DSScircuit.Meters.ZonePCE if x is not None and 'load.n_2' in x.lower()])
+                            n3_loads_num = len([x for x in DSScircuit.Meters.ZonePCE if x is not None and 'load.n_3' in x.lower()])
+                            
+                            
+                            a1_2h_loads_num = len(a1_loads_2hilos)
+                            a1_3h_loads_num = len(a1_loads_3hilos)
+                            a2_loads_num = len([x for x in DSScircuit.Meters.ZonePCE if x is not None and 'load.a_2' in x.lower()])
+                            a3_loads_num = len([x for x in DSScircuit.Meters.ZonePCE if x is not None and 'load.a_3' in x.lower()])
+                            
+                            #SUPONIENDO QUE LAS MEDICIONES SON CADA 15 MINUTOS
+                            #electromec_met_losses = 1/1000 # 1W 
+                            #electro_met_losses = 0.5/1000 #0.5W
+                            
+                            str_electromec_met_losses = self.dlg.PerdidasMedELM.text()
+                            str_electro_met_losses = self.dlg.PerdidasMedEL.text()
+                            
+                            if ',' in str_electromec_met_losses:
+                                electromec_met_losses = float(str_electromec_met_losses.replace(',','.'))/1000
+                            else:
+                                electromec_met_losses = float(str_electromec_met_losses)/1000
+                                
+                            if ',' in str_electro_met_losses:
+                                electro_met_losses = float(str_electro_met_losses.replace(',','.'))/1000
+                            else:
+                                electro_met_losses = float(str_electro_met_losses)/1000
+                            
+                            
+                            met_losses = ((n1_2h_loads_num + 2*n1_3h_loads_num+ 2*n2_loads_num + 3*n3_loads_num) * electromec_met_losses * 0.25 * 96) + ((a1_2h_loads_num + 2*a1_3h_loads_num + 2*a2_loads_num + 3*a3_loads_num)* electro_met_losses * 0.25 * 96)
+                            
+                            reporte_kWh.loc[met, 'Energía Pasante kWh'] = Datos_Energia[met].iloc[0,-1]
+                            reporte_kWh.loc[met, 'Energía Pasante (% Total)'] = 100 *(Datos_Energia[met].iloc[0,-1] / kWh_total)
+                            
+                            reporte_kWh.loc[met, 'Pérdidas Totales kWh'] = Datos_Energia[met].iloc[12,-1] + met_losses
+                            reporte_kWh.loc[met, 'Pérdidas Totales (% Total)'] = 100*Datos_Energia[met].iloc[12,-1]/kWh_total
+                            
+                            reporte_kWh.loc[met, 'Pérdidas Variables kWh'] = Datos_Energia[met].iloc[16,-1]
+                            reporte_kWh.loc[met, 'Pérdidas Variables (% Total)'] = 100*Datos_Energia[met].iloc[16,-1]/kWh_total
+                            
+                            reporte_kWh.loc[met, 'Pérdidas Fijas kWh'] = Datos_Energia[met].iloc[18,-1] + met_losses
+                            reporte_kWh.loc[met, 'Pérdidas Fijas (% Total)'] = 100*Datos_Energia[met].iloc[18,-1]/kWh_total
+                            
+                            reporte_kWh.loc[met, 'Pérdidas Líneas kWh'] = Datos_Energia[met].iloc[22,-1]
+                            reporte_kWh.loc[met, 'Pérdidas Líneas (% Total)'] = 100*Datos_Energia[met].iloc[22,-1]/kWh_total
+                            
+                            reporte_kWh.loc[met, 'Pérdidas Transformador kWh'] = Datos_Energia[met].iloc[23,-1]
+                            reporte_kWh.loc[met, 'Pérdidas Transformador (% Total)'] = 100*Datos_Energia[met].iloc[23,-1]/kWh_total
+                            
+                            
+                            reporte_kWh.loc[met, 'Pérdidas Medidores kWh'] = met_losses
+                            reporte_kWh.loc[met, 'Pérdidas Medidores (% Total)'] = 100 * reporte_kWh.loc[met, 'Pérdidas Medidores kWh']/kWh_total
+
+                        reporte_kWh.to_excel(dir_network+'\\Reportes_Pérdidas\\reporte_perdidas_kWh.xlsx')
+
+                        ## Resumen de reporte kWh
+                        
+                        resumen_reporte_kWh_tot = pandas.DataFrame(np.nan, index=['Energía desde Subestación kWh', 'Energía desde Subestación (% Total)', 'Energía Generada kWh', 'Energía Generada (% Total)', 'Energía Disponible kWh', 'Pérdidas Líneas MT kWh', 'Pérdidas Líneas MT (% Total)', 'Pérdidas Trafos MT/MT kWh', 'Pérdidas Trafos MT/MT (% Total)', 'Pérdidas Trafos MT/BT kWh', 'Pérdidas Trafos MT/BT (% Total)', 'Pérdidas Líneas BT kWh', 'Pérdidas Líneas BT (% Total)', 'Pérdidas Medidores kWh', 'Pérdidas Medidores (% Total)', 'Pérdidas Totales kWh','Pérdidas Totales (% Total)'], columns=['Valor'] )
+                        resumen_reporte_kWh_per = pandas.DataFrame(np.nan, index=['Pérdidas Líneas MT kWh', 'Pérdidas Líneas MT (% Total Pérdidas)', 'Pérdidas Trafos MT/MT kWh', 'Pérdidas Trafos MT/MT (% Total Pérdidas)', 'Pérdidas Trafos MT/BT kWh', 'Pérdidas Trafos MT/BT (% Total Pérdidas)', 'Pérdidas Líneas BT kWh', 'Pérdidas Líneas BT (% Total Pérdidas)', 'Pérdidas Medidores kWh', 'Pérdidas Medidores (% Total Pérdidas)', 'Pérdidas Totales kWh'], columns=['Valor'] )
+
+                        kWh_generated = 0
+                        for meter in Datos_Energia:
+                            kWh_generated += Datos_Energia[meter].loc['Gen kWh', lista_minutos[-1]]
+
+                        kWh_total = kWh_generated + Datos_Energia['met_sub'].iloc[0,-1] #Valor de energía consumida en kWh en el día por todo el circuito
+
+                        resumen_reporte_kWh_tot.loc['Energía desde Subestación kWh'] = Datos_Energia['met_sub'].iloc[0,-1]
+                        resumen_reporte_kWh_tot.loc['Energía desde Subestación (% Total)'] = 100*Datos_Energia['met_sub'].iloc[0,-1]/kWh_total
+                        resumen_reporte_kWh_tot.loc['Energía Generada kWh'] = kWh_generated
+                        resumen_reporte_kWh_tot.loc['Energía Generada (% Total)'] = 100*kWh_generated/kWh_total
+                        resumen_reporte_kWh_tot.loc['Energía Disponible kWh'] = kWh_total
+
+                        mvlines_losses = reporte_kWh.loc['met_sub', 'Pérdidas Líneas kWh']
+                        mvtx_losses = reporte_kWh.loc['met_sub', 'Pérdidas Transformador kWh']
+                        mvlvtx_losses = reporte_kWh.loc[[x for x in reporte_kWh.index if x!= 'met_sub']].sum()['Pérdidas Transformador kWh']
+                        lvlines_losses = reporte_kWh.loc[[x for x in reporte_kWh.index if x!= 'met_sub']].sum()['Pérdidas Líneas kWh']
+                        met_losses = reporte_kWh.sum()['Pérdidas Medidores kWh']
+                        total_losses = mvlines_losses + mvtx_losses + mvlvtx_losses + lvlines_losses+met_losses
+
+                        resumen_reporte_kWh_tot.loc['Pérdidas Líneas MT kWh'] =  mvlines_losses
+                        resumen_reporte_kWh_per.loc['Pérdidas Líneas MT kWh'] =  mvlines_losses
+                        resumen_reporte_kWh_tot.loc['Pérdidas Líneas MT (% Total)'] =  100*mvlines_losses/kWh_total
+                        resumen_reporte_kWh_per.loc['Pérdidas Líneas MT (% Total Pérdidas)'] =  100*mvlines_losses/total_losses
+
+                        resumen_reporte_kWh_tot.loc['Pérdidas Trafos MT/MT kWh'] =  mvtx_losses
+                        resumen_reporte_kWh_per.loc['Pérdidas Trafos MT/MT kWh'] =  mvtx_losses
+                        resumen_reporte_kWh_tot.loc['Pérdidas Trafos MT/MT (% Total)'] =  100*mvtx_losses/kWh_total
+                        resumen_reporte_kWh_per.loc['Pérdidas Trafos MT/MT (% Total Pérdidas)'] =  100*mvtx_losses/total_losses
+
+                        resumen_reporte_kWh_tot.loc['Pérdidas Trafos MT/BT kWh'] =  mvlvtx_losses
+                        resumen_reporte_kWh_per.loc['Pérdidas Trafos MT/BT kWh'] =  mvlvtx_losses
+                        resumen_reporte_kWh_tot.loc['Pérdidas Trafos MT/BT (% Total)'] =  100*mvlvtx_losses/kWh_total
+                        resumen_reporte_kWh_per.loc['Pérdidas Trafos MT/BT (% Total Pérdidas)'] =  100*mvlvtx_losses/total_losses
+
+                        resumen_reporte_kWh_tot.loc['Pérdidas Líneas BT kWh'] =  lvlines_losses
+                        resumen_reporte_kWh_per.loc['Pérdidas Líneas BT kWh'] =  lvlines_losses
+                        resumen_reporte_kWh_tot.loc['Pérdidas Líneas BT (% Total)'] =  100*lvlines_losses/kWh_total
+                        resumen_reporte_kWh_per.loc['Pérdidas Líneas BT (% Total Pérdidas)'] =  100*lvlines_losses/total_losses
+
+                        resumen_reporte_kWh_tot.loc['Pérdidas Medidores kWh'] =  met_losses
+                        resumen_reporte_kWh_per.loc['Pérdidas Medidores kWh'] =  met_losses
+                        resumen_reporte_kWh_tot.loc['Pérdidas Medidores (% Total)'] =  100*met_losses/kWh_total
+                        resumen_reporte_kWh_per.loc['Pérdidas Medidores (% Total Pérdidas)'] =  100*met_losses/total_losses
+
+                        resumen_reporte_kWh_tot.loc['Pérdidas Totales kWh'] = total_losses
+                        resumen_reporte_kWh_per.loc['Pérdidas Totales kWh'] = total_losses
+                        resumen_reporte_kWh_tot.loc['Pérdidas Totales (% Total)'] = 100*(mvlines_losses + mvtx_losses + mvlvtx_losses + lvlines_losses+met_losses)/kWh_total
+
+                        resumen_reporte_kWh_tot.to_excel(dir_network+'\\Reportes_Pérdidas\\resumen_reporte_kWh_totales.xlsx')
+                        resumen_reporte_kWh_tot.to_excel(dir_network+'\\Reportes_Pérdidas\\resumen_reporte_kWh_perdidas_totales.xlsx')
+
+                        ## Resumen reporte fijas y variables
+                        
+                        reporte_kWh_fv = pandas.DataFrame(np.nan, columns=['MT', 'BT'], index=['Pérdidas Fijas kWh', 'Pérdidas Fijas (% del Total)', 'Pérdidas Fijas (% Total Pérdidas)', 'Pérdidas Variables kWh', 'Pérdidas Variables (% del Total)', 'Pérdidas Variables (% Total Pérdidas)'])
+
+                        mv_load_losses = reporte_kWh.loc['met_sub', 'Pérdidas Variables kWh']
+                        mv_noload_losses = reporte_kWh.loc['met_sub', 'Pérdidas Fijas kWh']
+
+                        lv_load_losses = reporte_kWh.loc[[x for x in reporte_kWh.index if x!= 'met_sub']].sum()['Pérdidas Variables kWh']
+                        lv_noload_losses = reporte_kWh.loc[[x for x in reporte_kWh.index if x!= 'met_sub']].sum()['Pérdidas Fijas kWh']
+
+                        reporte_kWh_fv.loc['Pérdidas Fijas kWh', 'MT'] = mv_noload_losses
+                        reporte_kWh_fv.loc['Pérdidas Fijas (% del Total)', 'MT'] = 100* mv_noload_losses/kWh_total
+                        reporte_kWh_fv.loc['Pérdidas Fijas (% Total Pérdidas)', 'MT'] = 100* mv_noload_losses/total_losses
+
+                        reporte_kWh_fv.loc['Pérdidas Fijas kWh', 'BT'] = lv_noload_losses
+                        reporte_kWh_fv.loc['Pérdidas Fijas (% del Total)', 'BT'] = 100* lv_noload_losses/kWh_total
+                        reporte_kWh_fv.loc['Pérdidas Fijas (% Total Pérdidas)', 'BT'] = 100* lv_noload_losses/total_losses
+
+                        reporte_kWh_fv.loc['Pérdidas Variables kWh', 'MT'] = mv_load_losses
+                        reporte_kWh_fv.loc['Pérdidas Variables (% del Total)', 'MT'] = 100* mv_load_losses/kWh_total
+                        reporte_kWh_fv.loc['Pérdidas Variables (% Total Pérdidas)', 'MT'] = 100* mv_load_losses/total_losses
+
+                        reporte_kWh_fv.loc['Pérdidas Variables kWh', 'BT'] = lv_load_losses
+                        reporte_kWh_fv.loc['Pérdidas Variables (% del Total)', 'BT'] = 100* lv_load_losses/kWh_total
+                        reporte_kWh_fv.loc['Pérdidas Variables (% Total Pérdidas)', 'BT'] = 100* lv_load_losses/total_losses
+
+                        reporte_kWh_fv['Total'] = reporte_kWh_fv.sum(axis=1)
+                        reporte_kWh_fv.to_excel(dir_network+'\\Reportes_Pérdidas\\resumen_reporte_kWh_fijas_variables.xlsx')
+
+                        ## Reporte pérdidas en kW
+                        
+                        reporte_kW = pandas.DataFrame(np.nan, index=[x for x in DSScircuit.Meters.AllNames], columns=lista_minutos)
+
+                        for met in DSScircuit.Meters.AllNames:
+                            DSScircuit.Meters.Name = met
+                            branches = [x for x in DSScircuit.Meters.AllBranchesInZone if x is not None]
+                            
+                            reporte_kW.loc[met,:] = Datos_Perdidas.loc[branches,:].sum()
+                                
+                        reporte_kW.to_excel(dir_network+'\\Reportes_Pérdidas\\reporte_perdidas_kW.xlsx')
+
+                        ## Reporte kW normalizado
+                        
+                        # Primero hay que encontrar las curvas de los elementos que inyectan potencia al sistema
+                        kW_dem_total = pandas.DataFrame(index=lista_minutos, columns=[])
+
+                        #Potencia vista desde subestación
+                        kW_dem_total['Sub'] = temp_powersP 
+
+                        #Generadores
+                        if DSScircuit.Generators.AllNames[0] != 'NONE':
+                            for gen in DSScircuit.Generators.AllNames:
+                                kW_dem_total[gen] = Datos_Generacion.loc[gen,:]
+
+                        kW_dem_total['dem_total'] = kW_dem_total.sum(axis=1)
+
+                        # Aquí se realiza la división correspondiente
+                        reporte_kW_norm = reporte_kW.copy(deep=True)
+
+                        for t in lista_minutos:
+                            reporte_kW_norm[t] = 100*reporte_kW_norm[t]/kW_dem_total.loc[t, 'dem_total']
+
+                        reporte_kW_norm.to_excel(dir_network+'\\Reportes_Pérdidas\\reporte_perdidas_porcentuales.xlsx')
+                        
                         
                     os.system('clear')
     

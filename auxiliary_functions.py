@@ -628,32 +628,30 @@ def get_layersnames(name_output_azul):
         
     for line in lines:
         #Búsqueda de nombres de capas de líneas media tensión
-        str_search = "^.*Layers LinesMV.*: "
-        z = re.match(str_search, line)
-        if z: #si encontró la frase anterior entra al if
-            in_linesmv = z.end()
+        in_linesmv = line.find("Layers LinesMV: ")
+        if in_linesmv != -1: #si encontró la frase anterior entra al if
+            in_linesmv += len("Layers LinesMV: ")
             fin_linesmv = line.find("\n", in_linesmv)
             if fin_linesmv == -1:
                 layers_lines_mv = line[in_linesmv:]
             else:
                 layers_lines_mv = line[in_linesmv:fin_linesmv]
             if layers_lines_mv != "": #si existía alguna capa de líneas de mt
-                tmp = layers_lines_mv.split(",")
-                list_layersLinesMV += list(filter(None, tmp)) #se eliminan los espacios en blanco en la lista
+                list_layersLinesMV = layers_lines_mv.split(",")
+                list_layersLinesMV = list(filter(None, list_layersLinesMV)) #se eliminan los espacios en blanco en la lista
         
         #Búsqueda de nombres de capas de líneas baja tensión
-        str_search = "^.*Layers LinesLV.*: "
-        z = re.match(str_search, line)
-        if z: #si encontró la frase anterior entra al if
-            in_lineslv = z.end()
+        in_lineslv = line.find("Layers LinesLV: ")
+        if in_lineslv != -1: #si encontró la frase anterior entra al if
+            in_lineslv += len("Layers LinesLV: ")
             fin_lineslv = line.find("\n", in_lineslv)
             if fin_lineslv == -1:
-                layers_lines_lv = line[in_lineslv:]
+                layers_lines_lv = line[in_linesmv:]
             else:
-                layers_lines_lv = line[in_lineslv:fin_lineslv]
+                layers_lines_lv = line[in_linesmv:fin_linesmv]
             if layers_lines_lv != "": #si existía alguna capa de líneas de bt
-                tmp = layers_lines_lv.split(",")
-                list_layersLinesLV += list(filter(None, tmp)) #se eliminan los espacios en blanco en la lista
+                list_layersLinesLV = layers_lines_lv.split(",")
+                list_layersLinesLV = list(filter(None, list_layersLinesLV)) #se eliminan los espacios en blanco en la lista
         
         #Búsqueda de nombres de capas de transformadores
         in_transformers = line.find("Layers Transformers: ")
@@ -662,8 +660,9 @@ def get_layersnames(name_output_azul):
             fin_transformers = line.find("\n", in_transformers)
             layers_transformers = line[in_transformers:fin_transformers]
             if layers_transformers != "": #si existía alguna capa de transformadores
-                tmp = layers_transformers.split(",")
-                list_layersTrafos += list(filter(None, tmp)) #se eliminan los espacios en blanco en la lista
+                list_layersTrafos = layers_transformers.split(",")
+                list_layersTrafos = list(filter(None, list_layersTrafos)) #se eliminan los espacios en blanco en la lista
+    
     return list_layersTrafos, list_layersLinesMV, list_layersLinesLV
 
 def newShape(self, DSSNames, shapeName):  # new shape file creation

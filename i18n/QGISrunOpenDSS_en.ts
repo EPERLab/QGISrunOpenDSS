@@ -4,252 +4,278 @@
 <context>
     <name>Dialog</name>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="26"/>
         <source>QGIS2RunOpenDSS - Correr estudio de red usando OpenDSS</source>
-        <translation>QGIS2RunOpenDSS - Runs grid studies using OpenDSS</translation>
+        <translation type="vanished">QGIS2RunOpenDSS - Runs grid studies using OpenDSS</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="76"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="85"/>
         <source>Nombre del circuito</source>
         <translation>Circuit name</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="108"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="515"/>
         <source>Asigne la curva de demanda</source>
         <translation>Assign the demand curve</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="136"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="467"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1440"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1492"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1524"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1734"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1946"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2016"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2086"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="501"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="543"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1511"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1581"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1651"/>
         <source>...</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="150"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="117"/>
         <source>Defina el ángulo (grados)</source>
         <translation>Define the angle (degrees)</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="182"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="149"/>
         <source>Defina la frecuencia (Hz)</source>
         <translation>Define frequency (Hz)</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="217"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="184"/>
         <source>Defina la tensión (kV)</source>
         <translation>Define voltage (kV)</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="436"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="470"/>
         <source>Seleccione la ubicación de los archivos de salida</source>
         <translation>Select the destination folder for results</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="484"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="379"/>
         <source>Transformador principal</source>
         <translation>Main transformer</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="505"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="29"/>
+        <source>QGISRunOpenDSS - Correr estudio de red usando OpenDSS</source>
+        <translation>QGISrunOpenDSS - Run network study using OpenDSS</translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="347"/>
+        <source>Tensión de la fuente (pu)</source>
+        <translation>Source voltage (pu)</translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="400"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1953"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1991"/>
         <source>Definir Parámetros</source>
         <translation>Define parameters</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="548"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="586"/>
         <source>Flujos de potencia</source>
         <translation>Power flows</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="566"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2159"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="604"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1724"/>
         <source>Flujo de potencia instantáneo</source>
         <translation>Snapshot power flow</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="587"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="746"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1050"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2177"/>
-        <source>Defina la fecha de la simulación</source>
-        <translation>Define simulation date </translation>
-    </message>
-    <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="611"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="770"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1074"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2144"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2198"/>
-        <source>dd/mm/aaaa</source>
-        <translation></translation>
-    </message>
-    <message>
         <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="625"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1088"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2212"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="793"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1190"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1742"/>
+        <source>Defina la fecha de la simulación</source>
+        <translation>Define simulation date</translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="655"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="817"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1214"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1709"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1763"/>
+        <source>dd/mm/aaaa</source>
+        <translation>dd/mm/aaaa</translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="669"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1228"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1777"/>
         <source>Defina la hora de la simulación</source>
         <translation>Define simulation hour</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="728"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2105"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="775"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1670"/>
         <source>Flujo de potencia diario</source>
         <translation>Daily power flow</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="784"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="831"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;MT&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>MV</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="797"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="907"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="844"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="954"/>
         <source>Fase A</source>
         <translation>Phase A</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="810"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="894"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="857"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="941"/>
         <source>Fase B</source>
         <translation>Phase B</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="823"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="920"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="870"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="967"/>
         <source>Fase C</source>
         <translation>Phase C</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="836"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="865"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="883"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="912"/>
         <source>Promedio</source>
         <translation>Average</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="852"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="899"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600;&quot;&gt;BT&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>LV</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="881"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="928"/>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-weight:600; color:#0000ff;&quot;&gt;Gráficas LN&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>LN plots</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="934"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="986"/>
+        <source>Guardar reporte de pérdidas</source>
+        <translation>Save Losses Report</translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1004"/>
+        <source>ELM</source>
+        <translation></translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1043"/>
+        <source>EL</source>
+        <translation></translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1056"/>
+        <source>Pérdidas en Medidores</source>
+        <translation>Metter Losses</translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1071"/>
         <source>Flujo de potencia anual</source>
         <translation>Yearly power flow</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="952"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1089"/>
         <source>Defina la resolución de la simulación</source>
         <translation>Define the simulation resolution</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="994"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1134"/>
         <source>Corto circuito</source>
         <translation>Short circuit</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1006"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1146"/>
         <source>Análisis de corto circuito</source>
         <translation>Short circuit analysis</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1024"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1164"/>
         <source>Barra en corto circuito</source>
         <translation>Short circuit bus</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1153"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1293"/>
         <source>Fases en corto circuito</source>
         <translation>Phases in short circuit</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1165"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1305"/>
         <source>A</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1181"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1321"/>
         <source>B</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1197"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1337"/>
         <source>C</source>
         <translation></translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1221"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1917"/>
         <source>Añadir tecnologías</source>
         <translation>Technologies</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1282"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2008"/>
+        <source>Estudio de buses eléctricos</source>
+        <translation>Electric buses study</translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2038"/>
+        <source>20</source>
+        <translation>20</translation>
+    </message>
+    <message>
         <source>Capacidad total (kW)</source>
-        <translation>Total capacity (kW)</translation>
+        <translation type="vanished">Total capacity (kW)</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1306"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1357"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1395"/>
         <source>default 200</source>
-        <translation>Default 200</translation>
+        <translation type="vanished">Default 200</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1613"/>
         <source>Vehículos eléctricos</source>
-        <translation>Electric Vehicles (EVs)</translation>
+        <translation type="vanished">Electric Vehicles (EVs)</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1631"/>
         <source>Añadir vehículos eléctricos</source>
-        <translation>Add EVs</translation>
+        <translation type="vanished">Add EVs</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1676"/>
         <source>default 20</source>
-        <translation>Default 20</translation>
+        <translation type="vanished">Default 20</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1689"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2051"/>
         <source>Nivel de penetración (%):</source>
         <translation>Penetration level (%)</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1748"/>
         <source>Estrategia de ubicación</source>
-        <translation>Ubication strategy</translation>
+        <translation type="vanished">Ubication strategy</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1761"/>
         <source>Aleatoria</source>
-        <translation>Random</translation>
+        <translation type="vanished">Random</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1777"/>
         <source>Probabilística</source>
-        <translation>Probability</translation>
+        <translation type="vanished">Probability</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1790"/>
         <source>Por consumo</source>
-        <translation>Consumption</translation>
+        <translation type="vanished">Consumption</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1799"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1361"/>
         <source>Armónicos</source>
         <translation>Harmonics</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1811"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1373"/>
         <source>Flujo de potencia de armónicos</source>
         <translation>Harmonics power flow</translation>
     </message>
@@ -258,125 +284,117 @@
         <translation type="vanished">Assign the residential parameters file</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1927"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1997"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2067"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1492"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1562"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1632"/>
         <source>Seleccione archivo</source>
         <translation>Select the file</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1829"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1391"/>
         <source>Defina los armonicos a simular</source>
         <translation>Define the harmonics to simulate</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1856"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1418"/>
         <source>(e.j. 1-25)</source>
         <translation>(example, 1-25)</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2123"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1688"/>
         <source>Defina la fecha inicial de la simulación</source>
         <translation>Define start date of simulation</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="252"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="219"/>
         <source>Nombre barra del alimentador</source>
         <translation>First circuit bus name</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1213"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1353"/>
         <source>Linea - linea</source>
         <extracomment>If not checked: L-N</extracomment>
         <translation>Line-line</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1243"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1932"/>
+        <source>Estudio de vehículos eléctricos</source>
+        <translation>EV study</translation>
+    </message>
+    <message>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1970"/>
         <source>Generación distribuida</source>
-        <translation>Distributed generation</translation>
+        <translation>DG study</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1261"/>
         <source>Añadir sistemas fotovoltaicos</source>
-        <translation>Add PV systems</translation>
+        <translation type="vanished">Add PV systems</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="290"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="257"/>
         <source>Ingrese kA 1p de corto circuito</source>
         <translation>Short circuit 1ph kA</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="319"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="286"/>
         <source>Ingrese kA 3p de corto circuito</source>
         <translation>Short circuit 3ph kA</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="348"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="315"/>
         <source>MVA</source>
         <translation>MVA</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="364"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="331"/>
         <source>kA</source>
         <translation>kA</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="973"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1110"/>
         <source>En horas (default 1h)</source>
         <translation>In hours (default 1h)</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="988"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1125"/>
         <source>Ver pérdidas</source>
-        <translation>See losses</translation>
+        <translation>Show losses</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="711"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="755"/>
         <source>Ver desbalances de tensión</source>
-        <translation>See voltage unbalance</translation>
+        <translation>Show voltage unbalance</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1319"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1453"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1580"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1899"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1464"/>
         <source>Residencial</source>
         <translation>Residential</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1332"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1466"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1593"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1969"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1534"/>
         <source>General</source>
         <translation>Commercial and Industrial</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1370"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1479"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1606"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2039"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1604"/>
         <source>TMT</source>
         <translation>MV</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1409"/>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1703"/>
         <source>Seleccione los archivos de información</source>
-        <translation>Choose information files</translation>
+        <translation type="vanished">Choose information files</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1567"/>
         <source>Tipo de estudio</source>
-        <translation>Study type</translation>
+        <translation type="vanished">Study type</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1870"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1432"/>
         <source>Archivos de parámetros</source>
         <translation>Parameter files</translation>
     </message>
     <message>
-        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="2296"/>
+        <location filename="../QGIS_run_OpenDSS_dialog_base.ui" line="1861"/>
         <source>Guardar resultados en capas</source>
         <translation>Save results on shape</translation>
     </message>
@@ -503,19 +521,19 @@
         <location filename="../QGIS_run_OpenDSS_transformer.ui" line="856"/>
         <location filename="../QGIS_run_OpenDSS_transformer.ui" line="963"/>
         <source>Número de taps</source>
-        <translation>Tap quantity</translation>
+        <translation>Number of taps</translation>
     </message>
     <message>
         <location filename="../QGIS_run_OpenDSS_transformer.ui" line="878"/>
         <location filename="../QGIS_run_OpenDSS_transformer.ui" line="1025"/>
         <source>Máximo tap</source>
-        <translation>Maximum tap</translation>
+        <translation>Max tap</translation>
     </message>
     <message>
         <location filename="../QGIS_run_OpenDSS_transformer.ui" line="900"/>
         <location filename="../QGIS_run_OpenDSS_transformer.ui" line="1087"/>
         <source>Mínimo tap</source>
-        <translation>Minimum tap</translation>
+        <translation>Min tap</translation>
     </message>
     <message>
         <location filename="../QGIS_run_OpenDSS_transformer.ui" line="922"/>
@@ -526,7 +544,7 @@
     <message>
         <location filename="../QGIS_run_OpenDSS_transformer.ui" line="994"/>
         <source>Ubicación</source>
-        <translation>Tap position</translation>
+        <translation>Winding</translation>
     </message>
 </context>
 <context>
