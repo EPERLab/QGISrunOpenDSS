@@ -3319,7 +3319,7 @@ class QGISrunOpenDSS(object):
                         resumen_reporte_kWh_tot.loc['Pérdidas Totales (% Total)'] = 100*(mvlines_losses + mvtx_losses + mvlvtx_losses + lvlines_losses+met_losses)/kWh_total
 
                         resumen_reporte_kWh_tot.to_excel(dir_network+'\\Reportes_Pérdidas\\resumen_reporte_kWh_totales.xlsx')
-                        resumen_reporte_kWh_tot.to_excel(dir_network+'\\Reportes_Pérdidas\\resumen_reporte_kWh_perdidas_totales.xlsx')
+                        resumen_reporte_kWh_per.to_excel(dir_network+'\\Reportes_Pérdidas\\resumen_reporte_kWh_perdidas_totales.xlsx')
 
                         ## Resumen reporte fijas y variables
                         
@@ -4333,4 +4333,3 @@ class QGISrunOpenDSS(object):
             msg += msg_
             QMessageBox.critical(None, "Error", msg)
             return
-
