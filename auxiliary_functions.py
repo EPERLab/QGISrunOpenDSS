@@ -292,6 +292,7 @@ def PQ_corrector(DSSprogress, DSScircuit, DSStext, errorP, errorQ,
             DSStext.Command = 'clear'  # erase old circuits
             DSStext.Command = 'New Circuit.Circuito_Distribucion_Daily'  # create new circuit
             DSStext.Command = 'Compile ' + dir_network + '/Master.dss'  # Compila el archivo master de OpenDSS
+            DSStext.Command = 'batchedit generator.DERf_.* enabled = no' # No fictitious generators simulation
             
             if (study == 'daily') or (study == 'snapshot') or (study == 'shortCircuit'):
                 DSStext.Command = 'Set mode = daily'  # Define el tipo de simulacion a realizar (diaria en este caso)
