@@ -1005,12 +1005,13 @@ class QGISrunOpenDSS(object):
             mv_nodes_B = []
             mv_nodes_C = []
             
+            
             lv_nodes_A = []
             lv_nodes_B = []
             lv_nodes_C = []
             
             for node in nodes:
-                if "mv" in str(node).lower()or "source" in str(node).lower():
+                if "mv" in str(node).lower() or "source" in str(node).lower():
                     if str(node)[-1] == '1':
                         mv_nodes_A.append(node)
                     elif str(node)[-1] == '2':
@@ -1025,7 +1026,6 @@ class QGISrunOpenDSS(object):
                         lv_nodes_B.append(node)
                     elif str(node)[-1] == '3':
                         lv_nodes_C.append(node)
-                
             V_mv_A = pandas.DataFrame(index=mv_nodes_A, columns = ['voltage', 'distance'])
             V_mv_B = pandas.DataFrame(index=mv_nodes_B, columns = ['voltage', 'distance'])
             V_mv_C = pandas.DataFrame(index=mv_nodes_C, columns = ['voltage', 'distance'])
@@ -1861,7 +1861,8 @@ class QGISrunOpenDSS(object):
                 tx_main_bus_circuit = self.dlg.lineEdit_name_busbar.text().upper() # Name of the main busbar
     
                 if not load_curve_circuit and not tx_main_bus_circuit:
-                    QMessageBox.information(None, "Informacion Requerida", "Seleccione la curva de demanda del alimentador y \n defina el nombre de la barra principal")
+                    msg = "Seleccione la curva de demanda del alimentador y \n defina el nombre de la barra principal"
+                    QMessageBox.information(None, "Informacion Requerida", msg)
                     return
     
                 if not load_curve_circuit:
@@ -2153,7 +2154,9 @@ class QGISrunOpenDSS(object):
                         if not total_capacity:
                             total_capacity = str(200)# default to 200 kW
                         if not pv_information:
-                            QMessageBox.information(None, "Informacion Requerida", "Seleccione el archivo de información de generación distribuida para clientes residenciales")
+                            msg =  "Seleccione el archivo de información de generación distribuida para clientes residenciales"
+                            QMessageBox.information(None, "Informacion Requerida",
+                                                    msg)
                             return
     
                     # General
@@ -2164,7 +2167,9 @@ class QGISrunOpenDSS(object):
                         if not total_capacity_gen:
                             total_capacity_gen = str(200)
                         if not pv_information_gen:
-                            QMessageBox.information(None, "Informacion Requerida", "Seleccione el archivo de información de generación distribuida para clientes comercial e industrial")
+                            msg = "Seleccione el archivo de información de generación distribuida para clientes comercial e industrial"
+                            QMessageBox.information(None, "Informacion Requerida",
+                                                    msg)
                             return
     
                     # TMT
@@ -2175,7 +2180,9 @@ class QGISrunOpenDSS(object):
                         if not total_capacity_TMT:
                             total_capacity_TMT = str(200)
                         if not pv_information_TMT:
-                            QMessageBox.information(None, "Informacion Requerida", "Seleccione el archivo de información de generación distribuida para clientes TMT")
+                            msg = "Seleccione el archivo de información de generación distribuida para clientes TMT"
+                            QMessageBox.information(None, "Informacion Requerida",
+                                                    msg)
                             return
     
                 output_folder = self.dlg.lineEdit_dirOutput.text() # Output folder
@@ -2348,6 +2355,8 @@ class QGISrunOpenDSS(object):
                         #Generadores
                         if GenNames[0] != 'NONE':
                             for i in GenNames: # extract power from generators
+                                if "DERf_" in str(i):
+                                    continue
                                 DSScircuit.setActiveElement('generator.' + i)
                                 p = DSScircuit.ActiveElement.Powers
                                 for w in range(0, len(p), 2):
