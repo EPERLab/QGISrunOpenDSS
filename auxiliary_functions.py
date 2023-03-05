@@ -744,7 +744,7 @@ def ReadTrafosLoad(self, DSScircuit, DSStext, name_file_created):  # transformer
 
     # identifies 3-unit 3ph transformers on dss code
     for idx, name in enumerate(trafosNames):
-        if 'u' in str(name.replace(name_file_created.split('_')[0].lower(), '')) and 'auto' not in str(name.replace(name_file_created.split('_')[0].lower(), '')):
+        if '3u' in str(name.replace(name_file_created.split('_')[0].lower(), '')) and 'auto' not in str(name.replace(name_file_created.split('_')[0].lower(), '')):
             # QMessageBox.information(None, "Debug", name)
             trafosNames[idx] = str(name).split('_')[0] + '_' + str(name).split('_')[2]
             try:
@@ -787,7 +787,7 @@ def ReadTrafosLoad(self, DSScircuit, DSStext, name_file_created):  # transformer
                     pass
         # for 3-units 3ph transformers there is only one point representing it
         # this code writes the worst case for the unit
-        if 'U' in trafo.replace(name_file_created.split('_')[0].upper(), '') and 'auto' not in str(trafo.lower()):
+        if '3U' in trafo.replace(name_file_created.split('_')[0].upper(), '') and 'auto' not in str(trafo.lower()):
             trafo = trafo.split('_')[0] + '_' + trafo.split('_')[2]
             try:
                 if np.mean(trafosDict[trafo]) > np.mean(temp):
